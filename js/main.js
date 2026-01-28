@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.83";
+const V = "3.1.84";
 
 // -- Device Identity Optimization V3.1.72 --
 let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
@@ -139,11 +139,12 @@ class SniperCognition {
 
 const AI_Library = new SniperCognition();
 
-// -- PERSISTENCE MODULE V3.1.83 --
+// -- PERSISTENCE MODULE V3.1.84 --
 const configKeys = [
   'market-select', 'stake', 'compound-enabled', 'compound-levels', 'duration', 'duration-unit',
   'max-losses', 'strat-emas', 'strat-giraffa', 'strat-safari', 'strat-xfast', 'strat-sniper',
-  'strat-olymp', 'strat-autoscale', 'strat-require-all', 'sequential-mode', 'safety-circuit-enabled'
+  'strat-olymp', 'strat-autoscale', 'strat-require-all', 'sequential-mode', 'safety-circuit-enabled',
+  'device-name-input'
 ];
 
 function saveSettings() {
@@ -152,7 +153,19 @@ function saveSettings() {
     const el = document.getElementById(id);
     if (el) config[id] = el.type === 'checkbox' ? el.checked : el.value;
   });
+
+  // V3.1.84: Sync state with UI immediately
+  const stakeInput = document.getElementById('stake');
+  if (stakeInput && currentLevel === 1) currentStake = parseFloat(stakeInput.value) || 1.0;
+
+  const dNameInput = document.getElementById('device-name-input');
+  if (dNameInput) {
+    deviceName = dNameInput.value || 'Main PC';
+    localStorage.setItem('tk_device_name', deviceName);
+  }
+
   localStorage.setItem('tk_config', JSON.stringify(config));
+  if (typeof updateSummaryPanel === 'function') updateSummaryPanel();
 }
 
 function loadSettings() {
@@ -167,6 +180,17 @@ function loadSettings() {
         else el.value = config[id];
       }
     });
+
+    // Sync Initial State
+    const stakeInput = document.getElementById('stake');
+    if (stakeInput && currentLevel === 1) currentStake = parseFloat(stakeInput.value) || 1.0;
+
+    const dNameInput = document.getElementById('device-name-input');
+    if (dNameInput && config['device-name-input']) {
+      deviceName = config['device-name-input'];
+      localStorage.setItem('tk_device_name', deviceName);
+    }
+
     log('Configuration Restored from Storage. 🛡️', 'success');
   } catch (e) { console.error("Config Load Error", e); }
 }
@@ -973,35 +997,7 @@ function fetchHistoricalTrades() {
     .catch(err => console.error("DB Fetch Error:", err));
 }
 
-function saveSettings() {
-  const stake = document.getElementById('stake').value;
-  if (currentLevel === 1) currentStake = parseFloat(stake) || 1.0;
-  const settings = {
-    market: marketSelect.value,
-    deviceName: document.getElementById('device-name-input').value || 'Main PC',
-    stake: stake,
-    duration: document.getElementById('duration').value,
-    durationUnit: document.getElementById('duration-unit').value,
-    compoundEnabled: document.getElementById('compound-enabled').checked,
-    compoundLevels: document.getElementById('compound-levels').value,
-    strategies: {
-      ema: checkEmas.checked,
-      giraffa: checkGiraffa.checked,
-      safari: checkSafari.checked,
-      xfast: checkXFast.checked,
-      sniper: checkSniper.checked,
-      olymp: checkOlymp.checked,
-      autoscale: checkAutoScale ? checkAutoScale.checked : false,
-      requireAll: checkRequireAll.checked,
-      sequential: checkSequential.checked,
-      sniperTarget: document.getElementById('sniper-target') ? document.getElementById('sniper-target').value : 8
-    }
-  };
-  deviceName = settings.deviceName;
-  localStorage.setItem('tk_device_name', deviceName);
-  localStorage.setItem('tk_settings', JSON.stringify(settings));
-  updateSummaryPanel();
-}
+// [V3.1.84: DUPLICATE REMOVED]
 
 function updateSummaryPanel() {
   const summaryEl = document.getElementById('summary-content');
@@ -1124,44 +1120,8 @@ marketSelect.addEventListener('change', () => {
   updateMarketOracle();
 });
 
-function loadSettings() {
-  const saved = localStorage.getItem('tk_settings');
-  if (!saved) return;
-  try {
-    const s = JSON.parse(saved);
-    if (s.market) marketSelect.value = s.market;
-    if (s.deviceName) {
-      deviceName = s.deviceName;
-      localStorage.setItem('tk_device_name', deviceName);
-      if (document.getElementById('device-name-input')) document.getElementById('device-name-input').value = deviceName;
-    }
-    if (s.stake) {
-      const sVal = parseFloat(s.stake) || 1.0;
-      document.getElementById('stake').value = sVal.toFixed(2);
-      if (currentLevel === 1) currentStake = parseFloat(sVal);
-    }
-    if (s.duration) document.getElementById('duration').value = s.duration;
-    if (s.durationUnit && document.getElementById('duration-unit')) document.getElementById('duration-unit').value = s.durationUnit;
-    if (document.getElementById('compound-enabled')) {
-      document.getElementById('compound-enabled').checked = s.compoundEnabled;
-      document.getElementById('compound-levels').disabled = !s.compoundEnabled;
-      document.getElementById('compound-levels').value = s.compoundLevels || 3;
-    }
-    if (s.strategies) {
-      checkEmas.checked = s.strategies.ema;
-      checkGiraffa.checked = s.strategies.giraffa;
-      checkSafari.checked = s.strategies.safari;
-      checkXFast.checked = s.strategies.xfast;
-      checkSniper.checked = s.strategies.sniper;
-      if (checkOlymp) checkOlymp.checked = s.strategies.olymp;
-      if (checkAutoScale) checkAutoScale.checked = s.strategies.autoscale || false;
-      checkRequireAll.checked = s.strategies.requireAll;
-      checkSequential.checked = s.strategies.sequential;
-      if (document.getElementById('sniper-target')) document.getElementById('sniper-target').value = s.strategies.sniperTarget || 8;
-    }
-  } catch (e) { console.error("Settings Load Error", e); }
-  updateSummaryPanel();
-}
+// [V3.1.84: DUPLICATE REMOVED]
+updateSummaryPanel();
 
 function analyzeMarket() {
   if (!chartManager || !chartManager.allCandles || chartManager.allCandles.length < 100) return;
