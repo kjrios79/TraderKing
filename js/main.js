@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.90";
+const V = "3.1.91";
 
 // -- Device Identity Optimization V3.1.72 --
 let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
@@ -557,7 +557,7 @@ btnConnect.addEventListener('click', async () => {
 
       if (isEmaActive && data.crossover && isStartOfCandle) {
         // Confirmation: Price must be on the correct side of the crossover for a true breakout
-        const breakoutThreshold = 0.0001 * totalSelectivity; // Tighter at high levels
+        const breakoutThreshold = 0.0001; // Stabilized V3.1.91
         const isBullish = data.lastPrice > (data.ema + breakoutThreshold) && data.ema > data.sma;
         const isBearish = data.lastPrice < (data.ema - breakoutThreshold) && data.ema < data.sma;
 
@@ -571,14 +571,19 @@ btnConnect.addEventListener('click', async () => {
       }
       if (isGiraffaActive && data.fibo && isStartOfCandle) {
         const price = data.lastPrice;
-        const tolerance = 0.005 / totalSelectivity; // Tightened from 0.008 back to 0.005
+        const tolerance = 0.005 / totalSelectivity;
         const isNear618 = Math.abs(price - data.fibo.l618) <= ((data.fibo.max - data.fibo.min) * tolerance);
 
-        // Tightened: Only trade if SuperTrend and SMC agree on the reversal direction
+        // V3.1.91: Fibo Bounce Confirmation (Candle Color + RSI Momentum)
         if (isNear618) {
           const type = price > data.superTrend ? 'CALL' : 'PUT';
           const isTrendHealthy = (type === 'CALL' && data.smc === "Alcista") || (type === 'PUT' && data.smc === "Bajista");
-          if (isTrendHealthy) signals.push({ type, source: 'GIRAFFA' });
+          const isBounce = type === 'CALL' ? (data.lastCandle.close > data.lastCandle.open) : (data.lastCandle.close < data.lastCandle.open);
+          const rsiMomentum = type === 'CALL' ? (data.rsi > 45 && data.rsi < 75) : (data.rsi < 55 && data.rsi > 25);
+
+          if (isTrendHealthy && isBounce && rsiMomentum) {
+            signals.push({ type, source: 'GIRAFFA' });
+          }
         }
       }
       if (isSafariActive && isStartOfCandle) {
@@ -589,10 +594,15 @@ btnConnect.addEventListener('click', async () => {
         else if (data.safariTrend === "Bajista" && data.smc === "Bajista" && data.lastPrice < data.ichimoku.kijun && data.rsiLaguerre < rsiLow) signals.push({ type: 'PUT', source: 'SAFARI' });
       }
       if (isXFastActive && data.bollinger && isStartOfCandle) {
-        const Z_THRESHOLD = 0.8 + ((totalSelectivity - 1.0) * 0.4); // Balanced Z-Score (1.2x at L4)
+        const Z_THRESHOLD = 0.8 + ((totalSelectivity - 1.0) * 0.4);
         const isGreen = data.lastCandle.close > data.lastCandle.open;
-        if (data.lastPrice > data.bollinger.upper && data.zScore > Z_THRESHOLD && isGreen) signals.push({ type: 'CALL', source: 'X-FAST' });
-        else if (data.lastPrice < data.bollinger.lower && data.zScore < -Z_THRESHOLD && !isGreen) signals.push({ type: 'PUT', source: 'X-FAST' });
+        // V3.1.91: Injected RSI(7) momentum filter to match Safari precision
+        const rsi7 = Indicators.calculateRSI(chartManager.getCloses(), 7);
+        const isBullishMomentum = rsi7 > 60;
+        const isBearishMomentum = rsi7 < 40;
+
+        if (data.lastPrice > data.bollinger.upper && data.zScore > Z_THRESHOLD && isGreen && isBullishMomentum) signals.push({ type: 'CALL', source: 'X-FAST' });
+        else if (data.lastPrice < data.bollinger.lower && data.zScore < -Z_THRESHOLD && !isGreen && isBearishMomentum) signals.push({ type: 'PUT', source: 'X-FAST' });
       }
       if (signals.length > 0) {
         if (requireAll) {

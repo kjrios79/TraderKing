@@ -218,7 +218,7 @@ $v = time();
     <div id="mobile-backdrop"></div>
     <header>
       <button id="menu-toggle">☰</button>
-      <div class="logo">TRADERKING <span style="font-size:0.8rem; background:#f0b90b; color:#000; padding:2px 8px; border-radius:4px; font-weight:bold; margin-left:10px;">V3.1.90</span></div>
+      <div class="logo">TRADERKING <span style="font-size:0.8rem; background:#f0b90b; color:#000; padding:2px 8px; border-radius:4px; font-weight:bold; margin-left:10px;">V3.1.91</span></div>
       
       <!-- Market Oracle (Recommendation System) -->
       <div id="market-oracle" style="margin-left: 15px; background: rgba(240,185,11,0.05); border: 1px solid rgba(240,185,11,0.2); padding: 4px 12px; border-radius: 4px; font-size: 0.7rem; color: #f0b90b; min-width: 150px; display: flex; align-items: center; gap: 8px;">
@@ -348,25 +348,25 @@ $v = time();
           <div class="panel-content">
             <div class="strategy-item">
                 <input type="checkbox" id="strat-emas" checked>
-                <span onclick="document.getElementById('strat-emas').click()" title="EMA & SMA Crossover (Exact) 📈">EMA & SMA Crossover (Exact) 📈</span>
+                <span onclick="document.getElementById('strat-emas').click()" title="EMA & SMA Crossover (Exact) 📈">EMA & SMA Crossover 📈</span>
             </div>
             <div class="strategy-item">
                 <input type="checkbox" id="strat-giraffa">
-                <span onclick="document.getElementById('strat-giraffa').click()" title="Strategy Giraffa (Fibo + SuperTrend) 🦒">Strategy Giraffa (Fibo + SuperTrend) 🦒</span>
+                <span onclick="document.getElementById('strat-giraffa').click()" title="Giraffa (Fibo + SuperTrend) 🦒">Giraffa 🦒</span>
             </div>
             <div class="strategy-item">
                 <input type="checkbox" id="strat-safari" checked>
-                <span onclick="document.getElementById('strat-safari').click()" title="Strategy Safari (SMC + Ichimoku + Laguerre) 🦓">Strategy Safari (SMC + Ichimoku + Laguerre) 🦓</span>
+                <span onclick="document.getElementById('strat-safari').click()" title="Safari (SMC + Ichimoku + Laguerre) 🦓">Safari 🦓</span>
             </div>
             <div class="strategy-item" style="background: rgba(246,70,93,0.1); border-radius: 4px; padding: 5px;">
               <input type="checkbox" id="strat-xfast">
-              <span style="color: #f6465d; font-weight: 700;" title="STRATEGY X-FAST (Bollinger + Z-Score) ⚡">STRATEGY X-FAST (Bollinger + Z-Score) ⚡</span>
+              <span style="color: #f6465d; font-weight: 700;" title="X-FAST (Bollinger + Z-Score) 🚀">X-FAST 🚀</span>
           </div>
             
             <div class="strategy-item" style="background: rgba(46, 189, 133, 0.1); border-radius: 4px; padding: 5px; margin-top: 5px; border: 1px solid #2ebd85; display: flex; justify-content: space-between; align-items: center;">
                 <div style="display:flex; align-items:center; gap:10px;">
                     <input type="checkbox" id="strat-sniper">
-                    <span onclick="document.getElementById('strat-sniper').click()" title="High Precision: ADX > 30 + RSI Reversal" style="color: #2ebd85; font-weight: 700;">STRATEGY SNIPER 🎯</span>
+                    <span onclick="document.getElementById('strat-sniper').click()" title="High Precision: ADX > 30 + RSI Reversal" style="color: #2ebd85; font-weight: 700;">SNIPER 🎯</span>
                 </div>
                 <input type="number" id="sniper-target" value="8" min="1" max="20" style="width: 50px; padding: 4px; margin: 0; text-align: center; border: 1px solid #2ebd85; color: #2ebd85; font-weight: bold; background: #0b0e11;" title="Meta de Wins (Target)">
             </div>
