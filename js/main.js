@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.88";
+const V = "3.1.90";
 
 // -- Device Identity Optimization V3.1.72 --
 let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
@@ -1290,5 +1290,8 @@ if (btnManualPut) {
 loadSettings();
 configKeys.forEach(id => {
   const el = document.getElementById(id);
-  if (el) el.addEventListener('change', saveSettings);
+  if (el) {
+    el.addEventListener('change', saveSettings);
+    el.addEventListener('input', saveSettings);
+  }
 });
