@@ -158,6 +158,10 @@ export class ChartManager {
         } catch (e) { }
     }
 
+    getCloses() {
+        return this.allCandles.map(c => c.close);
+    }
+
     clear() {
         if (this.candleSeries) {
             try {
