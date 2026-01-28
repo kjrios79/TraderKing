@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.85";
+const V = "3.1.86";
 
 // -- Device Identity Optimization V3.1.72 --
 let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
@@ -181,9 +181,19 @@ function loadSettings() {
       }
     });
 
-    // Sync Initial State
+    // V3.1.86: Sync Initial State + UI Refresh
     const stakeInput = document.getElementById('stake');
-    if (stakeInput && currentLevel === 1) currentStake = parseFloat(stakeInput.value) || 1.0;
+    if (stakeInput) {
+      const sVal = parseFloat(stakeInput.value.replace(',', '.')) || 1.0;
+      if (currentLevel === 1) currentStake = sVal;
+    }
+
+    // Trigger UI updates for dependent fields
+    const compoundTog = document.getElementById('compound-enabled');
+    if (compoundTog) {
+      const lvInput = document.getElementById('compound-levels');
+      if (lvInput) lvInput.disabled = !compoundTog.checked;
+    }
 
     const dNameInput = document.getElementById('device-name-input');
     if (dNameInput && config['device-name-input']) {
@@ -226,6 +236,7 @@ function updateBotUI() {
     if (checkSafari.checked) activeModes.push("Safari");
     if (checkXFast.checked) activeModes.push("X-FAST");
     if (checkSniper.checked) activeModes.push("Sniper");
+    if (checkOlymp.checked) activeModes.push("Olymp");
     const modeList = activeModes.length > 0 ? activeModes.join(' + ') : 'Standby';
     log(`Final-Evo v${V} Active. Engine: [${modeList}] 💓`, 'info');
   } else {
@@ -492,18 +503,18 @@ btnConnect.addEventListener('click', async () => {
         if (sniperNeedsPullback) return;
         if (!isStartOfCandle) return; // Strictly start of candle
 
-        // Fatigue Filters (Avoid Peaks)
+        // V3.1.86: "CLASSIC" GOLDEN STANDARDS (V3.1.57 Restoration)
+        // Broad momentum windows allow high-win cycles at Levels 3-5.
+        const slopeMin = 0.02 * totalSelectivity;
 
-        // V3.1.85: Golden Standards - Broadened Momentum Windows (Allows 15:57 style shots)
-        const slopeMin = 0.03 * totalSelectivity;
+        // Classic RSI Logic: Broad enough to capture strong breakouts
+        const callTrigger = (rsi > 42 && rsi < 85 && data.lastPrice > data.ema && data.ema > data.sma && rsiSlope > slopeMin);
+        const putTrigger = (rsi < 58 && rsi > 15 && data.lastPrice < data.ema && data.ema < data.sma && rsiSlope < -slopeMin);
 
-        const callTrigger = (rsi > 40 && rsi < 85 && data.lastPrice > data.ema && data.ema > data.sma && rsiSlope > slopeMin);
-        const putTrigger = (rsi < 60 && rsi > 15 && data.lastPrice < data.ema && data.ema < data.sma && rsiSlope < -slopeMin);
-
-        // -- Wick Reversal Logic (Sniper Upgrade) --
+        // -- Wick Reversal Logic (Sniper Upgrade) - V3.1.86 (Tightened) --
         if (data.sniperWick !== "NONE") {
-          const isNearUpperBB = data.bollinger && data.lastPrice >= (data.bollinger.upper - (data.bollinger.upper - data.bollinger.middle) * 0.4);
-          const isNearLowerBB = data.bollinger && data.lastPrice <= (data.bollinger.lower + (data.bollinger.middle - data.bollinger.lower) * 0.4);
+          const isNearUpperBB = data.bollinger && data.lastPrice >= (data.bollinger.upper - (data.bollinger.upper - data.bollinger.middle) * 0.35);
+          const isNearLowerBB = data.bollinger && data.lastPrice <= (data.bollinger.lower + (data.bollinger.middle - data.bollinger.lower) * 0.35);
 
           if (data.sniperWick === "LOWER_REJECTION" && isNearLowerBB) {
             signals.push('CALL');
@@ -1006,8 +1017,8 @@ function fetchHistoricalTrades() {
 function updateSummaryPanel() {
   const summaryEl = document.getElementById('summary-content');
   if (!summaryEl) return;
-  const market = marketSelect.options[marketSelect.selectedIndex].text;
-  const stake = document.getElementById('stake').value;
+  const stakeInput = document.getElementById('stake');
+  const stakeValue = stakeInput ? parseFloat(stakeInput.value.replace(',', '.')) || 1.0 : 1.0;
   const duration = document.getElementById('duration').value;
   const compound = document.getElementById('compound-enabled').checked;
   const compLevels = document.getElementById('compound-levels').value;
