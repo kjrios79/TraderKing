@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.82";
+const V = "3.1.83";
 
 // -- Device Identity Optimization V3.1.72 --
 let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
@@ -138,6 +138,39 @@ class SniperCognition {
 }
 
 const AI_Library = new SniperCognition();
+
+// -- PERSISTENCE MODULE V3.1.83 --
+const configKeys = [
+  'market-select', 'stake', 'compound-enabled', 'compound-levels', 'duration', 'duration-unit',
+  'max-losses', 'strat-emas', 'strat-giraffa', 'strat-safari', 'strat-xfast', 'strat-sniper',
+  'strat-olymp', 'strat-autoscale', 'strat-require-all', 'sequential-mode', 'safety-circuit-enabled'
+];
+
+function saveSettings() {
+  const config = {};
+  configKeys.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) config[id] = el.type === 'checkbox' ? el.checked : el.value;
+  });
+  localStorage.setItem('tk_config', JSON.stringify(config));
+}
+
+function loadSettings() {
+  const saved = localStorage.getItem('tk_config');
+  if (!saved) return;
+  try {
+    const config = JSON.parse(saved);
+    configKeys.forEach(id => {
+      const el = document.getElementById(id);
+      if (el && config[id] !== undefined) {
+        if (el.type === 'checkbox') el.checked = config[id];
+        else el.value = config[id];
+      }
+    });
+    log('Configuration Restored from Storage. 🛡️', 'success');
+  } catch (e) { console.error("Config Load Error", e); }
+}
+
 let lastSnapshot = null;
 let botStartTime = Date.now();
 let lastBalanceUpdate = Date.now();
@@ -1277,3 +1310,9 @@ if (btnManualPut) {
     if (checkManualMode && checkManualMode.checked) handleTrade('PUT', 'Manual', true);
   });
 }
+// Final Initialization
+loadSettings();
+configKeys.forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', saveSettings);
+});
