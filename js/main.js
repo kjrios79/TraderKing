@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.86";
+const V = "3.1.87";
 
 // -- Device Identity Optimization V3.1.72 --
 let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
@@ -1017,6 +1017,7 @@ function fetchHistoricalTrades() {
 function updateSummaryPanel() {
   const summaryEl = document.getElementById('summary-content');
   if (!summaryEl) return;
+  const market = marketSelect.options[marketSelect.selectedIndex].text;
   const stakeInput = document.getElementById('stake');
   const stakeValue = stakeInput ? parseFloat(stakeInput.value.replace(',', '.')) || 1.0 : 1.0;
   const duration = document.getElementById('duration').value;
