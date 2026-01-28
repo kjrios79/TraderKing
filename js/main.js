@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.95";
+const V = "3.1.96";
 
 // -- Device Identity Optimization V3.1.72 --
 let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
@@ -690,7 +690,18 @@ function handleTrade(type, source = "Manual", isManual = false) {
   log(`DISPATCHING ORDER: ${type} @ $${currentStake.toFixed(2)} (${source})`, 'success');
   const data = chartManager.getLatestIndicators();
   const adx = Indicators.calculateADX(chartManager.allCandles.map(c => c.high), chartManager.allCandles.map(c => c.low), chartManager.allCandles.map(c => c.close), 14);
-  if (data) lastSnapshot = { rsi: data.rsi, adx, gap: Math.abs(data.ema - data.sma) / data.lastPrice, type };
+
+  // V3.1.96: Full Telemetry Snapshot
+  const snapshot = data ? {
+    rsi: data.rsi,
+    adx: adx,
+    zScore: data.zScore,
+    fibo: data.fibo618,
+    emaGap: Math.abs(data.ema - data.sma) / data.lastPrice,
+    trend: data.trend,
+    time: new Date().toISOString()
+  } : null;
+  lastSnapshot = snapshot;
 
   let duration = parseInt(document.getElementById('duration').value) || 1;
   let durationUnit = document.getElementById('duration-unit').value || 't';
@@ -731,6 +742,7 @@ function handleTrade(type, source = "Manual", isManual = false) {
   log(`BUY DISPATCH: ${market} | ${duration}${durationUnit} | ${formatCurrency(currentStake)}`, 'info');
   connection.buy({ amount: currentStake.toFixed(2), contract_type: type, symbol: market, duration, duration_unit: durationUnit });
   const row = addHistoryRow(source, market, type, currentStake);
+  if (snapshot) row.dataset.indicators = JSON.stringify(snapshot); // Attach telemetry to row V3.1.96
   lastPendingTradeRow = row; // Track for recovery
   tradeStartTime = Date.now(); // Track start time for timeout protection
   pendingRowsQueue.push(row);
@@ -824,7 +836,8 @@ function handleContractResult(data) {
       market: row.cells[2].textContent,
       type: row.cells[3].textContent,
       stake: parseFloat(row.cells[4].textContent.replace('$', '')),
-      status: 'PENDING'
+      status: 'PENDING',
+      indicators_json: row.dataset.indicators // Persist telemetry V3.1.96
     });
   }
 
@@ -898,7 +911,8 @@ function handleContractResult(data) {
       type: row.cells[3].textContent,
       stake: parseFloat(row.cells[4].textContent.replace('$', '')),
       profit: profit,
-      status: isWin ? 'WON' : 'LOST'
+      status: isWin ? 'WON' : 'LOST',
+      indicators_json: row.dataset.indicators // Persist telemetry V3.1.96
     });
 
     const isOurTrade = myLocalContractIds.has(contractId);

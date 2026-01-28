@@ -24,18 +24,20 @@ if ($action === 'save') {
     $stake = $_POST['stake'] ?? 0;
     $profit = $_POST['profit'] ?? null;
     $status = $_POST['status'] ?? 'PENDING';
+    $indicators = $_POST['indicators_json'] ?? null;
 
     if (empty($contract_id)) {
         die(json_encode(['error' => 'contract_id is required']));
     }
 
-    $stmt = $conn->prepare("INSERT INTO trades (contract_id, instance_id, device_name, strategy, market, type, stake, profit, status) 
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) 
+    $stmt = $conn->prepare("INSERT INTO trades (contract_id, instance_id, device_name, strategy, market, type, stake, profit, status, indicators_json) 
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
                             ON DUPLICATE KEY UPDATE 
                             strategy = VALUES(strategy), 
                             profit = VALUES(profit), 
-                            status = VALUES(status)");
-    $stmt->bind_param("ssssssdds", $contract_id, $instance_id, $device_name, $strategy, $market, $type, $stake, $profit, $status);
+                            status = VALUES(status),
+                            indicators_json = VALUES(indicators_json)");
+    $stmt->bind_param("ssssssddss", $contract_id, $instance_id, $device_name, $strategy, $market, $type, $stake, $profit, $status, $indicators);
 
     if ($stmt->execute()) {
         echo json_encode(['success' => true]);
