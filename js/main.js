@@ -349,6 +349,12 @@ btnConnect.addEventListener('click', async () => {
         lastBalanceUpdate = Date.now(); // Reset to wait for next sync
       }
 
+      // V3.1.81: Balance Watchdog & Sniper Stabilizer
+      if (tickCount % 30 === 0 && (Date.now() - lastBalanceUpdate > 60000)) {
+        log('WATCHDOG: Balance stale. Force Sync... 🔄', 'warning');
+        connection.send({ balance: 1, subscribe: 1 });
+        lastBalanceUpdate = Date.now();
+      }
       tickCount++;
 
       const data = chartManager.getLatestIndicators();
@@ -437,11 +443,11 @@ btnConnect.addEventListener('click', async () => {
 
         // Fatigue Filters (Avoid Peaks)
 
-        // Fatigue Filters (Avoid Peaks) - Soro Shielding V3.1.55 (Optimized Multipliers)
-        const rsiGap = (totalSelectivity - 1.0) * 4; // Reduced from 10x to 4x
+        // Fatigue Filters (Avoid Peaks) - V3.1.81 (Stricter Multipliers)
+        const rsiGap = (totalSelectivity - 1.0) * 8; // Restored to 8x for safety
         const rsiMin = 46 + rsiGap;
         const rsiMax = 67 - rsiGap;
-        const slopeMin = 0.03 * totalSelectivity; // Slightly lower slope req
+        const slopeMin = 0.05 * totalSelectivity; // Higher slope requirement (0.05)
 
         const callTrigger = (rsi > rsiMin && rsi < rsiMax && data.lastPrice > data.ema && data.ema > data.sma && rsiSlope > slopeMin);
         const putTrigger = (rsi > (33 + rsiGap) && rsi < (54 - rsiGap) && data.lastPrice < data.ema && data.ema < data.sma && rsiSlope < -slopeMin);
