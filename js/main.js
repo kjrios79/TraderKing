@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.72";
+const V = "3.1.75";
 
 // -- Device Identity Optimization V3.1.72 --
 let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
@@ -629,21 +629,30 @@ function handleTrade(type, source = "Manual", isManual = false) {
   // REMOVED: saveTradeToDB with PENDING_... temp ID to avoid duplicates.
   // The real contract_id will be saved by handleContractResult as soon as 'buy' or 'proposal_open_contract' returns it.
 
-  // Dynamic Latch: Duration + 5m safety margin (Increased for robustness V3.1.69)
-  const timeoutMs = (durationUnit === 'm' ? duration * 60 : duration) * 1000 + 300000;
-  log(`LATCH ENGAGED: Waiting up to ${timeoutMs / 1000}s for settlement. 🛡️`, 'info');
-
-  tradeTimeout = setTimeout(() => {
-    if (tradeInProgress) {
+  // V3.1.75: Protected Execution Latch
+  const activeContractId = currentSequenceContractId;
+  const lockReleaseMs = (durationUnit === 'm' ? duration * 60 : duration) * 1000 + 45000;
+  setTimeout(() => {
+    // Only release if the lock is still held by the SAME trade or still in PENDING state
+    if (tradeInProgress && (currentSequenceContractId === activeContractId || currentSequenceContractId === 'PENDING')) {
+      log(`LATCH: Execution lock released (Waiting Sync). Precision Buffed. 🛡️`, 'warning');
       tradeInProgress = false;
-      currentSequenceContractId = null;
-      log(`WARNING: Trade latch timed out after ${timeoutMs / 1000}s. Forcing Reset. ⚠️`, 'error');
+      dynamicSelectivity = Math.min(1.5, dynamicSelectivity + 0.1);
+      updateSummaryPanel();
+    }
+  }, lockReleaseMs);
 
-      // UI Recovery: Mark the row if still pending
-      if (lastPendingTradeRow && lastPendingTradeRow.classList.contains('trade-pending')) {
-        const cell = lastPendingTradeRow.cells[5];
-        if (cell) cell.innerHTML = `<span style="color:#848e9c; font-size:0.65rem;">Check Hist (Timeout)</span>`;
-        lastPendingTradeRow.classList.remove('trade-pending');
+  // Safety cleanup for UI (5 mins)
+  const timeoutMs = (durationUnit === 'm' ? duration * 60 : duration) * 1000 + 300000;
+  setTimeout(() => {
+    if (row && row.classList.contains('trade-pending')) {
+      const cell = row.cells[5];
+      if (cell) cell.innerHTML = `<span style="color:#848e9c; font-size:0.65rem;">Check Hist (Timeout)</span>`;
+      row.classList.remove('trade-pending');
+      // If the lock was STILL held by THIS specific trade, release it
+      if (tradeInProgress && currentSequenceContractId === activeContractId) {
+        tradeInProgress = false;
+        currentSequenceContractId = null;
       }
     }
   }, timeoutMs);
@@ -1180,20 +1189,12 @@ setInterval(() => {
     });
   }
 
-  // V3.1.67: CONTRACT HEARTBEAT (Re-Subscribe to stuck trades)
-  if (connection && isAuthorized && tickCount % 5 === 0) { // Every ~5s
-    const stuckRows = document.querySelectorAll('tr.trade-pending');
-    stuckRows.forEach(r => {
+  // V3.1.74: AGGRESSIVE CONTRACT POLLING (Every 3s)
+  if (connection && isAuthorized && tickCount % 3 === 0) {
+    const pending = document.querySelectorAll('tr.trade-pending');
+    pending.forEach(r => {
       const cid = r.dataset.contractId;
-      if (cid && !mySyncedContractIds.has(cid)) {
-        log(`HEARTBEAT: Re-hooking stream for ${cid}... 💓`, 'info');
-        connection.subscribeSpecificContract(cid);
-        mySyncedContractIds.add(cid);
-      } else if (cid) {
-        // V3.1.69: Heartbeat restored with 15 candles as requested.
-        // Guards in the history handler prevent these small updates from wiping the chart.
-        connection.getHistory(marketSelect.value, 15);
-      }
+      if (cid) connection.send({ proposal_open_contract: 1, contract_id: cid });
     });
   }
 }, 1000);
