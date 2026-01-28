@@ -20,24 +20,35 @@ $config = $conf_res->fetch_assoc();
 $app_id = $config['deriv_app_id'] ?? '1089';
 $token = $config['deriv_token'] ?? '';
 
+// Fetch all distinct devices for filtering
+$device_res = $conn->query("SELECT DISTINCT instance_id, device_name FROM trades WHERE instance_id IS NOT NULL");
+$devices = [];
+while($row = $device_res->fetch_assoc()) $devices[] = $row;
+
+$selected_instance = $_GET['instance_id'] ?? '';
+$where_clause = "status != 'PENDING'";
+if (!empty($selected_instance)) {
+    $where_clause .= " AND instance_id = '" . $conn->real_escape_string($selected_instance) . "'";
+}
+
 // Fetch strategy stats with total count
-$stats_res = $conn->query("SELECT strategy, COUNT(*) as total, SUM(CASE WHEN status='WON' THEN 1 ELSE 0 END) as wins, SUM(profit) as total_profit FROM trades WHERE status != 'PENDING' GROUP BY strategy");
+$stats_res = $conn->query("SELECT strategy, COUNT(*) as total, SUM(CASE WHEN status='WON' THEN 1 ELSE 0 END) as wins, SUM(profit) as total_profit FROM trades WHERE $where_clause GROUP BY strategy");
 $stats = [];
 while($row = $stats_res->fetch_assoc()) $stats[] = $row;
 
 // Fetch market-specific stats
-$market_res = $conn->query("SELECT market, COUNT(*) as total, SUM(CASE WHEN status='WON' THEN 1 ELSE 0 END) as wins, SUM(CASE WHEN status='LOST' THEN 1 ELSE 0 END) as losses, SUM(profit) as total_profit FROM trades WHERE status != 'PENDING' GROUP BY market ORDER BY wins DESC");
+$market_res = $conn->query("SELECT market, COUNT(*) as total, SUM(CASE WHEN status='WON' THEN 1 ELSE 0 END) as wins, SUM(CASE WHEN status='LOST' THEN 1 ELSE 0 END) as losses, SUM(profit) as total_profit FROM trades WHERE $where_clause GROUP BY market ORDER BY wins DESC");
 $market_stats = [];
 while($row = $market_res->fetch_assoc()) $market_stats[] = $row;
 
 // Fetch global stats
-$total_res = $conn->query("SELECT COUNT(*) as total_ops, SUM(profit) as grand_total FROM trades WHERE status != 'PENDING'");
+$total_res = $conn->query("SELECT COUNT(*) as total_ops, SUM(profit) as grand_total FROM trades WHERE $where_clause");
 $global_stats = $total_res->fetch_assoc();
 $grand_total = $global_stats['grand_total'] ?? 0;
 $total_ops = $global_stats['total_ops'] ?? 0;
 
 // Fetch last 500 trades excluding pending
-$trades_res = $conn->query("SELECT * FROM trades WHERE status != 'PENDING' ORDER BY timestamp DESC LIMIT 500");
+$trades_res = $conn->query("SELECT * FROM trades WHERE $where_clause ORDER BY timestamp DESC LIMIT 500");
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -63,6 +74,9 @@ $trades_res = $conn->query("SELECT * FROM trades WHERE status != 'PENDING' ORDER
         .badge-win { background: rgba(0,255,136,0.1); color: #00ff88; }
         .badge-loss { background: rgba(255,51,68,0.1); color: #ff3344; }
         .badge-total { background: rgba(240,185,11,0.1); color: #f0b90b; }
+        .filter-box { background: #1e2329; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #2b2f36; display: flex; align-items: center; gap: 15px; }
+        select { background: #0b0e11; color: white; border: 1px solid #444; padding: 8px 12px; border-radius: 4px; outline: none; }
+        .device-tag { font-size: 0.6rem; background: #2b2f36; padding: 2px 5px; border-radius: 3px; color: #848e9c; }
     </style>
 </head>
 <body>
@@ -70,7 +84,7 @@ $trades_res = $conn->query("SELECT * FROM trades WHERE status != 'PENDING' ORDER
         <h1 style="display:flex; align-items:center; justify-content: space-between; gap:10px; margin-bottom: 25px;">
             <div style="display:flex; align-items:center; gap:10px;">
                 <span style="color:#f0b90b">Shielded History</span> 
-                <span style="font-size:0.8rem; background:#f0b90b; color:#000; padding:2px 8px; border-radius:4px; font-weight:bold;">V3.1.67</span>
+                <span style="font-size:0.8rem; background:#f0b90b; color:#000; padding:2px 8px; border-radius:4px; font-weight:bold;">V3.1.73</span>
             </div>
             <div style="display:flex; gap:15px;">
                 <div style="background: rgba(255,184,0,0.1); border: 1px solid rgba(255,184,0,0.3); padding: 5px 15px; border-radius: 8px; font-size: 1rem; color: #ffb800; display:none;" id="balance-box">
@@ -87,6 +101,18 @@ $trades_res = $conn->query("SELECT * FROM trades WHERE status != 'PENDING' ORDER
                 </div>
             </div>
         </h1>
+
+        <div class="filter-box">
+            <span style="color:#848e9c; font-size: 0.8rem; font-weight: bold;">FILTRAR POR EQUIPO:</span>
+            <select onchange="window.location.href='?instance_id=' + this.value">
+                <option value="">Todos los Equipos (Global)</option>
+                <?php foreach($devices as $d): ?>
+                    <option value="<?php echo $d['instance_id']; ?>" <?php echo $selected_instance == $d['instance_id'] ? 'selected' : ''; ?>>
+                        <?php echo $d['device_name']; ?> (<?php echo $d['instance_id']; ?>)
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
         
         <div class="stat-grid">
             <?php foreach($stats as $s): ?>
@@ -132,6 +158,7 @@ $trades_res = $conn->query("SELECT * FROM trades WHERE status != 'PENDING' ORDER
             <thead>
                 <tr>
                     <th>Estrategia</th>
+                    <th>Equipo</th>
                     <th>Fecha/Hora</th>
                     <th>Mercado</th>
                     <th>Tipo</th>
@@ -143,6 +170,7 @@ $trades_res = $conn->query("SELECT * FROM trades WHERE status != 'PENDING' ORDER
                 <?php while($t = $trades_res->fetch_assoc()): ?>
                     <tr>
                         <td style="color:#f0b90b; font-weight: bold;"><?php echo $t['strategy']; ?></td>
+                        <td><span class="device-tag"><?php echo $t['device_name'] ?? 'Generic'; ?></span></td>
                         <td><?php echo $t['timestamp']; ?></td>
                         <td><?php echo $t['market']; ?></td>
                         <td style="color:<?php echo $t['type'] == 'CALL' ? '#00ff88' : '#ff3344'; ?>; font-weight: bold;"><?php echo $t['type']; ?></td>
