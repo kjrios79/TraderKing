@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.84";
+const V = "3.1.85";
 
 // -- Device Identity Optimization V3.1.72 --
 let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
@@ -494,14 +494,11 @@ btnConnect.addEventListener('click', async () => {
 
         // Fatigue Filters (Avoid Peaks)
 
-        // Fatigue Filters (Avoid Peaks) - V3.1.81 (Stricter Multipliers)
-        const rsiGap = (totalSelectivity - 1.0) * 8; // Restored to 8x for safety
-        const rsiMin = 46 + rsiGap;
-        const rsiMax = 67 - rsiGap;
-        const slopeMin = 0.05 * totalSelectivity; // Higher slope requirement (0.05)
+        // V3.1.85: Golden Standards - Broadened Momentum Windows (Allows 15:57 style shots)
+        const slopeMin = 0.03 * totalSelectivity;
 
-        const callTrigger = (rsi > rsiMin && rsi < rsiMax && data.lastPrice > data.ema && data.ema > data.sma && rsiSlope > slopeMin);
-        const putTrigger = (rsi > (33 + rsiGap) && rsi < (54 - rsiGap) && data.lastPrice < data.ema && data.ema < data.sma && rsiSlope < -slopeMin);
+        const callTrigger = (rsi > 40 && rsi < 85 && data.lastPrice > data.ema && data.ema > data.sma && rsiSlope > slopeMin);
+        const putTrigger = (rsi < 60 && rsi > 15 && data.lastPrice < data.ema && data.ema < data.sma && rsiSlope < -slopeMin);
 
         // -- Wick Reversal Logic (Sniper Upgrade) --
         if (data.sniperWick !== "NONE") {
@@ -631,12 +628,16 @@ const myContractIds = new Set();
 let tradeTimeout = null;
 
 function getDynamicBaseStake() {
-  let baseStake = parseFloat(document.getElementById('stake').value) || 1.0;
+  const stakeEl = document.getElementById('stake');
+  if (!stakeEl) return 1.0;
+  // Robust parsing for comma/dot separators
+  let stakeVal = parseFloat(stakeEl.value.replace(',', '.')) || 1.0;
+
   if (checkAutoScale && checkAutoScale.checked && currentBalance >= 100) {
     const scaledStake = Math.floor(currentBalance / 100) * 10;
-    if (scaledStake > baseStake) baseStake = scaledStake;
+    if (scaledStake > stakeVal) stakeVal = scaledStake;
   }
-  return baseStake;
+  return stakeVal;
 }
 
 function handleTrade(type, source = "Manual", isManual = false) {
@@ -647,8 +648,11 @@ function handleTrade(type, source = "Manual", isManual = false) {
 
   const baseStake = getDynamicBaseStake();
 
-  if (currentLevel === 1) currentStake = parseFloat(baseStake);
-  if (!document.getElementById('compound-enabled').checked) { currentStake = parseFloat(baseStake); currentLevel = 1; }
+  if (currentLevel === 1) currentStake = baseStake;
+  if (!document.getElementById('compound-enabled').checked) {
+    currentStake = baseStake;
+    currentLevel = 1;
+  }
   const market = marketSelect.value;
   tradeInProgress = true;
   currentSequenceContractId = 'PENDING';
