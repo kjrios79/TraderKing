@@ -161,14 +161,29 @@ export const Indicators = {
     },
 
     calculateRSILaguerre(prices, gamma = 0.2) {
-        if (prices.length < 4) return 0;
-        const last = prices[prices.length - 1];
-        const prev1 = prices[prices.length - 2];
-        const prev2 = prices[prices.length - 3];
-        const l0 = (1 - gamma) * last + gamma * prev1;
-        const l1 = -gamma * l0 + prev1 + gamma * prev2;
-        const rsiLaguerre = l1 !== 0 ? l0 / l1 : 0;
-        return Math.min(100, Math.max(0, rsiLaguerre * 100));
+        if (prices.length < 5) return 50;
+        let l0 = 0, l1 = 0, l2 = 0, l3 = 0;
+        let l0Prev = 0, l1Prev = 0, l2Prev = 0, l3Prev = 0;
+
+        // Cumulative calculation
+        for (let i = 0; i < prices.length; i++) {
+            const p = prices[i];
+            l0 = (1 - gamma) * p + gamma * l0Prev;
+            l1 = -gamma * l0 + l0Prev + gamma * l1Prev;
+            l2 = -gamma * l1 + l1Prev + gamma * l2Prev;
+            l3 = -gamma * l2 + l2Prev + gamma * l3Prev;
+            l0Prev = l0; l1Prev = l1; l2Prev = l2; l3Prev = l3;
+        }
+
+        let cu = 0;
+        let cd = 0;
+
+        if (l0 >= l1) cu += l0 - l1; else cd += l1 - l0;
+        if (l1 >= l2) cu += l1 - l2; else cd += l2 - l1;
+        if (l2 >= l3) cu += l2 - l3; else cd += l3 - l2;
+
+        if (cu + cd === 0) return 0;
+        return (cu / (cu + cd)) * 100;
     },
 
     calculateSuperTrend(prices, period, factor) {
