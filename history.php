@@ -84,7 +84,7 @@ $trades_res = $conn->query("SELECT * FROM trades WHERE $where_clause ORDER BY ti
         <h1 style="display:flex; align-items:center; justify-content: space-between; gap:10px; margin-bottom: 25px;">
             <div style="display:flex; align-items:center; gap:10px;">
                 <span style="color:#f0b90b">Shielded History</span> 
-                <span style="font-size:0.8rem; background:#f0b90b; color:#000; padding:2px 8px; border-radius:4px; font-weight:bold;">V3.1.73</span>
+                <span style="font-size:0.8rem; background:#f0b90b; color:#000; padding:2px 8px; border-radius:4px; font-weight:bold;">V3.1.89</span>
             </div>
             <div style="display:flex; gap:15px;">
                 <div style="background: rgba(255,184,0,0.1); border: 1px solid rgba(255,184,0,0.3); padding: 5px 15px; border-radius: 8px; font-size: 1rem; color: #ffb800; display:none;" id="balance-box">
@@ -196,13 +196,17 @@ $trades_res = $conn->query("SELECT * FROM trades WHERE $where_clause ORDER BY ti
             ws.onopen = () => ws.send(JSON.stringify({ authorize: token }));
             ws.onmessage = (msg) => {
                 const data = JSON.parse(msg.data);
-                if (data.msg_type === 'authorize') {
+                if (data.msg_type === 'authorize' && data.authorize) {
                     document.getElementById('balance-box').style.display = 'block';
-                    document.getElementById('live-balance').textContent = `${data.authorize.currency} ${parseFloat(data.authorize.balance).toFixed(2)}`;
+                    document.getElementById('live-balance').textContent = `${data.authorize.currency || 'USD'} ${parseFloat(data.authorize.balance || 0).toFixed(2)}`;
                     ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
                 }
-                if (data.msg_type === 'balance') {
-                    document.getElementById('live-balance').textContent = `${data.balance.currency} ${parseFloat(data.balance.balance).toFixed(2)}`;
+                if (data.msg_type === 'balance' && data.balance) {
+                    document.getElementById('live-balance').textContent = `${data.balance.currency || 'USD'} ${parseFloat(data.balance.balance || 0).toFixed(2)}`;
+                }
+                // V3.1.89: Handle errors to avoid console noise
+                if (data.error) {
+                    console.warn("History Sync Alert:", data.error.message);
                 }
             };
         }
