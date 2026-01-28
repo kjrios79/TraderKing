@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.80";
+const V = "3.1.82";
 
 // -- Device Identity Optimization V3.1.72 --
 let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
@@ -333,14 +333,11 @@ btnConnect.addEventListener('click', async () => {
     lastServerTime = tick.epoch;
     lastTickLocalTime = Date.now();
 
-    const currentMinute = Math.floor(tick.epoch / 60) * 60;
-    const isNewCandle = lastCandleTime !== 0 && currentMinute > lastCandleTime;
-
-    // We update lastCandleTime immediately to "consume" the new candle opportunity
-    // This prevents "deferred" entries if a trade latch resets mid-minute.
-    lastCandleTime = currentMinute;
-
     const isSequentialReq = document.getElementById('sequential-mode').checked;
+
+    // V3.1.82: Unified Global Sync Gate
+    const isStartOfCandle = (lastServerTime % 60) <= 1.5;
+
     if (botRunning && isAuthorized && (isSequentialReq ? !tradeInProgress : true)) {
       // V3.1.80: Balance Watchdog
       if (tickCount % 30 === 0 && (Date.now() - lastBalanceUpdate > 60000)) {
@@ -378,8 +375,8 @@ btnConnect.addEventListener('click', async () => {
       const requireAll = checkRequireAll && checkRequireAll.checked;
       const signals = [];
 
-      // Mandatory Market Rest: Allow back-to-back if at least 45s passed since last dispatch
-      const recentlyTraded = lastTradeCandleTime !== 0 && (lastServerTime < lastTradeCandleTime + 45);
+      // Mandatory Market Rest: Restoration of the 60s Gap to avoid "Crazy" frequency
+      const recentlyTraded = lastTradeCandleTime !== 0 && (lastServerTime < lastTradeCandleTime + 60);
 
       if (!isEmaActive && !isGiraffaActive && !isSafariActive && !isXFastActive && !isSniperActive && !isOlympActive) {
         if (tickCount % 20 === 0) log('SECURITY: Select an active logic block.', 'error');
@@ -433,13 +430,10 @@ btnConnect.addEventListener('click', async () => {
           return;
         }
 
-        // V3.1.78: Strict Candle Start Sync (Window: 0.0s - 1.5s)
-        const isEntryWindow = (lastServerTime % 60) <= 1.5;
-
         if (recentlyTraded) return;
         if (sniperCooldown > 0) return;
         if (sniperNeedsPullback) return;
-        if (!isEntryWindow) return; // Strictly start of candle
+        if (!isStartOfCandle) return; // Strictly start of candle
 
         // Fatigue Filters (Avoid Peaks)
 
@@ -478,9 +472,6 @@ btnConnect.addEventListener('click', async () => {
       }
 
 
-      // V3.1.78: Unified Sync Window
-      const isStartOfCandle = (lastServerTime % 60) <= 1.5;
-
       if (isOlympActive && isStartOfCandle) {
         const rsi = data.rsi;
         const olympSignal = Indicators.detectOlympRejection(chartManager.allCandles, data.ema36, data.ema51, data.sma20, data.bollinger, rsi);
@@ -513,11 +504,17 @@ btnConnect.addEventListener('click', async () => {
           log(`EMA/SMA: Crossover detected, waiting for breakout confirmation...`, 'info');
         }
       }
-      if (isGiraffaActive && data.fibo) {
+      if (isGiraffaActive && data.fibo && isStartOfCandle) {
         const price = data.lastPrice;
-        const tolerance = 0.008 / totalSelectivity; // Slightly more permissive (0.008 vs 0.005)
+        const tolerance = 0.005 / totalSelectivity; // Tightened from 0.008 back to 0.005
         const isNear618 = Math.abs(price - data.fibo.l618) <= ((data.fibo.max - data.fibo.min) * tolerance);
-        if (isNear618) signals.push({ type: price > data.superTrend ? 'CALL' : 'PUT', source: 'GIRAFFA' });
+
+        // Tightened: Only trade if SuperTrend and SMC agree on the reversal direction
+        if (isNear618) {
+          const type = price > data.superTrend ? 'CALL' : 'PUT';
+          const isTrendHealthy = (type === 'CALL' && data.smc === "Alcista") || (type === 'PUT' && data.smc === "Bajista");
+          if (isTrendHealthy) signals.push({ type, source: 'GIRAFFA' });
+        }
       }
       if (isSafariActive && isStartOfCandle) {
         const safariGap = (totalSelectivity - 1.0) * 6; // Reduced from 15x to 6x
