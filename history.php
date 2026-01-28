@@ -84,7 +84,7 @@ $trades_res = $conn->query("SELECT * FROM trades WHERE $where_clause ORDER BY ti
         <h1 style="display:flex; align-items:center; justify-content: space-between; gap:10px; margin-bottom: 25px;">
             <div style="display:flex; align-items:center; gap:10px;">
                 <span style="color:#f0b90b">Shielded History</span> 
-                <span style="font-size:0.8rem; background:#f0b90b; color:#000; padding:2px 8px; border-radius:4px; font-weight:bold;">V3.1.92</span>
+                <span style="font-size:0.8rem; background:#f0b90b; color:#000; padding:2px 8px; border-radius:4px; font-weight:bold;">V3.1.93</span>
             </div>
             <div style="display:flex; gap:15px;">
                 <div style="background: rgba(255,184,0,0.1); border: 1px solid rgba(255,184,0,0.3); padding: 5px 15px; border-radius: 8px; font-size: 1rem; color: #ffb800; display:none;" id="balance-box">

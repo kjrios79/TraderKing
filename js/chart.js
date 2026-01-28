@@ -244,6 +244,7 @@ export class ChartManager {
             sniperWick: Indicators.detectSniperWick(lastCandle),
             olympRejection: Indicators.detectOlympRejection(this.allCandles, Indicators.calculateEMA(prices, 36), Indicators.calculateEMA(prices, 51), Indicators.calculateSMA(prices, 20), Indicators.calculateRSI(prices, 14)),
             marketForce: Indicators.calculateMarketForce(highs, lows, 14),
+            adx: Indicators.calculateADX(highs, lows, prices, 14),
             lastPrice: prices[prices.length - 1],
             lastCandle: lastCandle
         };
