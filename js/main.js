@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.94";
+const V = "3.1.95";
 
 // -- Device Identity Optimization V3.1.72 --
 let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
@@ -55,6 +55,7 @@ const sidebar = document.querySelector('aside');
 let connection = null;
 let botRunning = false;
 let tradeInProgress = false;
+let lastTradeStartTime = 0; // V3.1.95: For Freeze Protection
 let isAuthorized = false;
 let currentStake = 1.0;
 // SAFETY: Force clean numeric initialization
@@ -355,6 +356,7 @@ btnConnect.addEventListener('click', async () => {
     setTimeout(() => analyzeMarket(), 1000);
   });
   connection.on('error', (err) => {
+    if (err.message && err.message.includes('already subscribed')) return; // Silenced V3.1.95
     log(`Master Alert: ${err.message}`, 'error');
 
     // RECOVERY LOGIC V3.1.61: Handle Rate Limits or Rejections
@@ -403,222 +405,227 @@ btnConnect.addEventListener('click', async () => {
 
     const isSequentialReq = document.getElementById('sequential-mode').checked;
 
+    // V3.1.95: Life Circuit (Freeze Protection)
+    // If a trade is stuck for more than 120 seconds, we release the lock.
+    if (tradeInProgress && lastTradeStartTime > 0 && (Date.now() - lastTradeStartTime > 120000)) {
+      log('LIFE CIRCUIT: Trade timeout detected. Releasing lock... 🛠️🔓', 'warning');
+      tradeInProgress = false;
+      lastTradeStartTime = 0;
+    }
+
     // V3.1.82: Unified Global Sync Gate
     const isStartOfCandle = (lastServerTime % 60) <= 1.5;
 
-    if (botRunning && isAuthorized && (isSequentialReq ? !tradeInProgress : true)) {
-      // V3.1.80: Balance Watchdog
+    if (botRunning && isAuthorized) {
+      tickCount++; // Move tickCount outside trade-lock for heartbeat stability V3.1.95
+
+      // V3.1.81: Balance Watchdog (Cleaned redundancy)
       if (tickCount % 30 === 0 && (Date.now() - lastBalanceUpdate > 60000)) {
         log('WATCHDOG: Balance stale. Re-syncing... 🔄', 'warning');
         connection.send({ balance: 1, subscribe: 1 });
-        lastBalanceUpdate = Date.now(); // Reset to wait for next sync
-      }
-
-      // V3.1.81: Balance Watchdog & Sniper Stabilizer
-      if (tickCount % 30 === 0 && (Date.now() - lastBalanceUpdate > 60000)) {
-        log('WATCHDOG: Balance stale. Force Sync... 🔄', 'warning');
-        connection.send({ balance: 1, subscribe: 1 });
         lastBalanceUpdate = Date.now();
       }
-      tickCount++;
 
-      const data = chartManager.getLatestIndicators();
-      if (!data) return;
+      if (isSequentialReq ? !tradeInProgress : true) {
+        const data = chartManager.getLatestIndicators();
+        if (!data) return;
 
-      // Pullback detection
-      if (sniperNeedsPullback) {
-        const threshold = data.lastPrice * 0.00015; // 0.015% tolerance
-        if (Math.abs(data.lastPrice - data.ema) <= threshold) {
-          sniperNeedsPullback = false;
-          log('SNIPER: Pullback detected. Logic reset! 🦉', 'info');
-        }
-      }
-
-      const isEmaActive = checkEmas && checkEmas.checked;
-      const isGiraffaActive = checkGiraffa && checkGiraffa.checked;
-      const isSafariActive = checkSafari && checkSafari.checked;
-      const isXFastActive = checkXFast && checkXFast.checked;
-      const isSniperActive = checkSniper && checkSniper.checked;
-      const isOlympActive = checkOlymp && checkOlymp.checked;
-      const requireAll = checkRequireAll && checkRequireAll.checked;
-      const signals = [];
-
-      // Mandatory Market Rest: Restoration of the 60s Gap to avoid "Crazy" frequency
-      const recentlyTraded = lastTradeCandleTime !== 0 && (lastServerTime < lastTradeCandleTime + 60);
-
-      if (!isEmaActive && !isGiraffaActive && !isSafariActive && !isXFastActive && !isSniperActive && !isOlympActive) {
-        if (tickCount % 20 === 0) log('SECURITY: Select an active logic block.', 'error');
-        return;
-      }
-      if (tickCount % 12 === 0) {
-        log(`Master Pulse 💓 RSI: ${data.rsi.toFixed(1)} | ZS: ${data.zScore.toFixed(1)}`, 'info');
-      }
-
-      // Universal Soro Shielding V3: Steep 5-Level Curve
-      // L1: 1.0x, L2: 1.35x, L3: 1.70x, L4: 2.05x, L5: 2.40x (Shielded!)
-      const levelBoost = (currentLevel > 1) ? (currentLevel - 1) * 0.35 : 0;
-      const totalSelectivity = dynamicSelectivity + levelBoost;
-
-      // --- Safety Circuit Check ---
-      if (checkSafetyCircuit.checked && Date.now() < pauseUntil) {
-        const remainingSec = Math.ceil((pauseUntil - Date.now()) / 1000);
-        if (tickCount % 5 === 0) {
-          log(`SAFETY CIRCUIT: Protected Pause Active. Returning in ${remainingSec}s. 🛡️🐕`, 'warning');
-        }
-        return;
-      }
-      if (isSniperActive) {
-        const prices = chartManager.allCandles.map(c => c.close);
-        const highs = chartManager.allCandles.map(c => c.high);
-        const lows = chartManager.allCandles.map(c => c.low);
-        const adx = Indicators.calculateADX(highs, lows, prices, 14);
-        const rsi = data.rsi;
-        const prevPrices = prices.slice(0, -1);
-        const prevRsi = Indicators.calculateRSI(prevPrices, 14);
-        const rsiSlope = rsi - prevRsi;
-        const isGreen = data.lastCandle.close > data.lastCandle.open;
-        const isRed = data.lastCandle.close < data.lastCandle.open;
-        const gap = Math.abs(data.ema - data.sma) / data.lastPrice;
-        const currentSnap = { rsi, adx, gap };
-        const matchScore = AI_Library.calculateSimilarity(currentSnap, 'wins');
-        const lossScore = AI_Library.calculateSimilarity(currentSnap, 'losses');
-        if (tickCount % 10 === 0) {
-          const aiMsg = AI_Library.wins.length > 0 ? ` | AI Match: ${matchScore.toFixed(0)}%` : ' | AI: Learning...';
-          const lossMsg = AI_Library.losses.length > 0 ? ` | Loss Similarity: ${lossScore.toFixed(0)}%` : '';
-          const precMsg = totalSelectivity > 1.0 ? ` | Total Precision: ${totalSelectivity.toFixed(2)}x` : '';
-          log(`SNIPER SCAN: ADX ${adx.toFixed(1)}${aiMsg}${lossMsg}${precMsg} 🔭`, 'info');
+        // Pullback detection
+        if (sniperNeedsPullback) {
+          const threshold = data.lastPrice * 0.00015; // 0.015% tolerance
+          if (Math.abs(data.lastPrice - data.ema) <= threshold) {
+            sniperNeedsPullback = false;
+            log('SNIPER: Pullback detected. Logic reset! 🦉', 'info');
+          }
         }
 
-        const isAiMasterMatch = matchScore > 90;
-        const isLossRepeat = lossScore > 85;
+        const isEmaActive = checkEmas && checkEmas.checked;
+        const isGiraffaActive = checkGiraffa && checkGiraffa.checked;
+        const isSafariActive = checkSafari && checkSafari.checked;
+        const isXFastActive = checkXFast && checkXFast.checked;
+        const isSniperActive = checkSniper && checkSniper.checked;
+        const isOlympActive = checkOlymp && checkOlymp.checked;
+        const requireAll = checkRequireAll && checkRequireAll.checked;
+        const signals = [];
 
-        // -- Loss Avoidance Filter --
-        if (isLossRepeat) {
-          if (tickCount % 5 === 0) log(`AI: Trade Blocked! Pattern similar to previous loss (${lossScore.toFixed(0)}%) 🛡️`, 'warning');
+        // Mandatory Market Rest: Restoration of the 60s Gap to avoid "Crazy" frequency
+        const recentlyTraded = lastTradeCandleTime !== 0 && (lastServerTime < lastTradeCandleTime + 60);
+
+        if (!isEmaActive && !isGiraffaActive && !isSafariActive && !isXFastActive && !isSniperActive && !isOlympActive) {
+          if (tickCount % 20 === 0) log('SECURITY: Select an active logic block.', 'error');
           return;
         }
+        if (tickCount % 12 === 0) {
+          log(`Master Pulse 💓 RSI: ${data.rsi.toFixed(1)} | ZS: ${data.zScore.toFixed(1)}`, 'info');
+        }
 
-        if (recentlyTraded) return;
-        if (sniperCooldown > 0) return;
-        if (sniperNeedsPullback) return;
-        if (!isStartOfCandle) return; // Strictly start of candle
+        // Universal Soro Shielding V3: Steep 5-Level Curve
+        // L1: 1.0x, L2: 1.35x, L3: 1.70x, L4: 2.05x, L5: 2.40x (Shielded!)
+        const levelBoost = (currentLevel > 1) ? (currentLevel - 1) * 0.35 : 0;
+        const totalSelectivity = dynamicSelectivity + levelBoost;
 
-        // V3.1.86: "CLASSIC" GOLDEN STANDARDS (V3.1.57 Restoration)
-        // Broad momentum windows allow high-win cycles at Levels 3-5.
-        const slopeMin = 0.02 * totalSelectivity;
+        // --- Safety Circuit Check ---
+        if (checkSafetyCircuit.checked && Date.now() < pauseUntil) {
+          const remainingSec = Math.ceil((pauseUntil - Date.now()) / 1000);
+          if (tickCount % 5 === 0) {
+            log(`SAFETY CIRCUIT: Protected Pause Active. Returning in ${remainingSec}s. 🛡️🐕`, 'warning');
+          }
+          return;
+        }
+        if (isSniperActive) {
+          const prices = chartManager.allCandles.map(c => c.close);
+          const highs = chartManager.allCandles.map(c => c.high);
+          const lows = chartManager.allCandles.map(c => c.low);
+          const adx = Indicators.calculateADX(highs, lows, prices, 14);
+          const rsi = data.rsi;
+          const prevPrices = prices.slice(0, -1);
+          const prevRsi = Indicators.calculateRSI(prevPrices, 14);
+          const rsiSlope = rsi - prevRsi;
+          const isGreen = data.lastCandle.close > data.lastCandle.open;
+          const isRed = data.lastCandle.close < data.lastCandle.open;
+          const gap = Math.abs(data.ema - data.sma) / data.lastPrice;
+          const currentSnap = { rsi, adx, gap };
+          const matchScore = AI_Library.calculateSimilarity(currentSnap, 'wins');
+          const lossScore = AI_Library.calculateSimilarity(currentSnap, 'losses');
+          if (tickCount % 10 === 0) {
+            const aiMsg = AI_Library.wins.length > 0 ? ` | AI Match: ${matchScore.toFixed(0)}%` : ' | AI: Learning...';
+            const lossMsg = AI_Library.losses.length > 0 ? ` | Loss Similarity: ${lossScore.toFixed(0)}%` : '';
+            const precMsg = totalSelectivity > 1.0 ? ` | Total Precision: ${totalSelectivity.toFixed(2)}x` : '';
+            log(`SNIPER SCAN: ADX ${adx.toFixed(1)}${aiMsg}${lossMsg}${precMsg} 🔭`, 'info');
+          }
 
-        // Classic RSI Logic: Broad enough to capture strong breakouts
-        const callTrigger = (rsi > 42 && rsi < 85 && data.lastPrice > data.ema && data.ema > data.sma && rsiSlope > slopeMin);
-        const putTrigger = (rsi < 58 && rsi > 15 && data.lastPrice < data.ema && data.ema < data.sma && rsiSlope < -slopeMin);
+          const isAiMasterMatch = matchScore > 90;
+          const isLossRepeat = lossScore > 85;
 
-        // -- Wick Reversal Logic (Sniper Upgrade) - V3.1.86 (Tightened) --
-        if (data.sniperWick !== "NONE") {
-          const isNearUpperBB = data.bollinger && data.lastPrice >= (data.bollinger.upper - (data.bollinger.upper - data.bollinger.middle) * 0.35);
-          const isNearLowerBB = data.bollinger && data.lastPrice <= (data.bollinger.lower + (data.bollinger.middle - data.bollinger.lower) * 0.35);
+          // -- Loss Avoidance Filter --
+          if (isLossRepeat) {
+            if (tickCount % 5 === 0) log(`AI: Trade Blocked! Pattern similar to previous loss (${lossScore.toFixed(0)}%) 🛡️`, 'warning');
+            return;
+          }
 
-          if (data.sniperWick === "LOWER_REJECTION" && isNearLowerBB) {
-            signals.push('CALL');
-            log(`SNIPER: Bullish Reversal detected at Lower Zone! 🏹`, 'success');
-          } else if (data.sniperWick === "UPPER_REJECTION" && isNearUpperBB) {
-            signals.push('PUT');
-            log(`SNIPER: Bearish Reversal detected at Upper Zone! 🏹`, 'success');
+          if (recentlyTraded) return;
+          if (sniperCooldown > 0) return;
+          if (sniperNeedsPullback) return;
+          if (!isStartOfCandle) return; // Strictly start of candle
+
+          // V3.1.86: "CLASSIC" GOLDEN STANDARDS (V3.1.57 Restoration)
+          // Broad momentum windows allow high-win cycles at Levels 3-5.
+          const slopeMin = 0.02 * totalSelectivity;
+
+          // Classic RSI Logic: Broad enough to capture strong breakouts
+          const callTrigger = (rsi > 42 && rsi < 85 && data.lastPrice > data.ema && data.ema > data.sma && rsiSlope > slopeMin);
+          const putTrigger = (rsi < 58 && rsi > 15 && data.lastPrice < data.ema && data.ema < data.sma && rsiSlope < -slopeMin);
+
+          // -- Wick Reversal Logic (Sniper Upgrade) - V3.1.86 (Tightened) --
+          if (data.sniperWick !== "NONE") {
+            const isNearUpperBB = data.bollinger && data.lastPrice >= (data.bollinger.upper - (data.bollinger.upper - data.bollinger.middle) * 0.35);
+            const isNearLowerBB = data.bollinger && data.lastPrice <= (data.bollinger.lower + (data.bollinger.middle - data.bollinger.lower) * 0.35);
+
+            if (data.sniperWick === "LOWER_REJECTION" && isNearLowerBB) {
+              signals.push('CALL');
+              log(`SNIPER: Bullish Reversal detected at Lower Zone! 🏹`, 'success');
+            } else if (data.sniperWick === "UPPER_REJECTION" && isNearUpperBB) {
+              signals.push('PUT');
+              log(`SNIPER: Bearish Reversal detected at Upper Zone! 🏹`, 'success');
+            } else if (tickCount % 5 === 0) {
+              log(`SNIPER: Wick rejection detected but outside active Zone.`, 'info');
+            }
+          }
+
+          if ((callTrigger && isGreen) || (isAiMasterMatch && isGreen && rsiSlope > 0)) {
+            signals.push({ type: 'CALL', source: 'SNIPER' });
+            log(`SNIPER SHOT: CALL (${isAiMasterMatch ? 'AI Pattern' : 'Rules'}) 🎯`, 'success');
+          } else if ((putTrigger && isRed) || (isAiMasterMatch && isRed && rsiSlope < 0)) {
+            signals.push({ type: 'PUT', source: 'SNIPER' });
+            log(`SNIPER SHOT: PUT (${isAiMasterMatch ? 'AI Pattern' : 'Rules'}) 🎯`, 'success');
+          }
+        }
+
+
+        if (isOlympActive && isStartOfCandle) {
+          const rsi = data.rsi;
+          const olympSignal = Indicators.detectOlympRejection(chartManager.allCandles, data.ema36, data.ema51, data.sma20, data.bollinger, rsi);
+
+          if (olympSignal && olympSignal !== "NONE") {
+            if (recentlyTraded) {
+              log(`WYSETRADE: Signal detected, market resting... 🧘‍♂️`, 'info');
+            } else {
+              const type = olympSignal.includes("CALL") ? 'CALL' : 'PUT';
+              signals.push({ type, source: 'WYSETRADE' });
+              log(`WYSETRADE: Pattern ${olympSignal} Detected! ↔️🔱`, 'success');
+            }
+            return;
+          }
+        }
+
+        // V3.1.78: All strategies below use the unified 1.5s window
+
+        if (isEmaActive && data.crossover && isStartOfCandle) {
+          // Confirmation: Price must be on the correct side of the crossover for a true breakout
+          const breakoutThreshold = 0.0001; // Stabilized V3.1.91
+          const isBullish = data.lastPrice > (data.ema + breakoutThreshold) && data.ema > data.sma;
+          const isBearish = data.lastPrice < (data.ema - breakoutThreshold) && data.ema < data.sma;
+
+          if (data.crossover === "UP" && isBullish) {
+            signals.push({ type: 'CALL', source: 'EMA/SMA' });
+          } else if (data.crossover === "DOWN" && isBearish) {
+            signals.push({ type: 'PUT', source: 'EMA/SMA' });
           } else if (tickCount % 5 === 0) {
-            log(`SNIPER: Wick rejection detected but outside active Zone.`, 'info');
+            log(`EMA/SMA: Crossover detected, waiting for breakout confirmation...`, 'info');
           }
         }
+        if (isGiraffaActive && data.fibo && isStartOfCandle) {
+          const price = data.lastPrice;
+          const tolerance = 0.005 / totalSelectivity;
+          const isNear618 = Math.abs(price - data.fibo.l618) <= ((data.fibo.max - data.fibo.min) * tolerance);
 
-        if ((callTrigger && isGreen) || (isAiMasterMatch && isGreen && rsiSlope > 0)) {
-          signals.push({ type: 'CALL', source: 'SNIPER' });
-          log(`SNIPER SHOT: CALL (${isAiMasterMatch ? 'AI Pattern' : 'Rules'}) 🎯`, 'success');
-        } else if ((putTrigger && isRed) || (isAiMasterMatch && isRed && rsiSlope < 0)) {
-          signals.push({ type: 'PUT', source: 'SNIPER' });
-          log(`SNIPER SHOT: PUT (${isAiMasterMatch ? 'AI Pattern' : 'Rules'}) 🎯`, 'success');
+          // V3.1.94: Giraffa 2.0 (ADX Trend + EMA Proximity + Fibo Bounce)
+          const isTrendStrong = data.adx > 20;
+          const emaProximity = Math.abs(price - data.sma) / data.sma < 0.003;
+
+          if (isNear618 && isTrendStrong && emaProximity) {
+            const type = price > data.superTrend ? 'CALL' : 'PUT';
+            const isTrendHealthy = (type === 'CALL' && data.smc === "Alcista") || (type === 'PUT' && data.smc === "Bajista");
+            const isBounce = type === 'CALL' ? (data.lastCandle.close > data.lastCandle.open) : (data.lastCandle.close < data.lastCandle.open);
+            const rsiMomentum = type === 'CALL' ? (data.rsi > 45 && data.rsi < 75) : (data.rsi < 55 && data.rsi > 25);
+
+            if (isTrendHealthy && isBounce && rsiMomentum) {
+              signals.push({ type, source: 'GIRAFFA' });
+            }
+          }
         }
-      }
+        if (isSafariActive && isStartOfCandle) {
+          const safariGap = (totalSelectivity - 1.0) * 6; // Reduced from 15x to 6x
+          const rsiHigh = 70 + safariGap;
+          const rsiLow = 30 - safariGap;
+          if (data.safariTrend === "Alcista" && data.smc === "Alcista" && data.lastPrice > data.ichimoku.kijun && data.rsiLaguerre > rsiHigh) signals.push({ type: 'CALL', source: 'SAFARI' });
+          else if (data.safariTrend === "Bajista" && data.smc === "Bajista" && data.lastPrice < data.ichimoku.kijun && data.rsiLaguerre < rsiLow) signals.push({ type: 'PUT', source: 'SAFARI' });
+        }
+        if (isXFastActive && data.bollinger && isStartOfCandle) {
+          const Z_THRESHOLD = 0.8 + ((totalSelectivity - 1.0) * 0.4);
+          const isGreen = data.lastCandle.close > data.lastCandle.open;
+          // V3.1.91: Injected RSI(7) momentum filter to match Safari precision
+          const rsi7 = Indicators.calculateRSI(chartManager.getCloses(), 7);
+          const isBullishMomentum = rsi7 > 60;
+          const isBearishMomentum = rsi7 < 40;
 
-
-      if (isOlympActive && isStartOfCandle) {
-        const rsi = data.rsi;
-        const olympSignal = Indicators.detectOlympRejection(chartManager.allCandles, data.ema36, data.ema51, data.sma20, data.bollinger, rsi);
-
-        if (olympSignal && olympSignal !== "NONE") {
-          if (recentlyTraded) {
-            log(`WYSETRADE: Signal detected, market resting... 🧘‍♂️`, 'info');
+          if (data.lastPrice > data.bollinger.upper && data.zScore > Z_THRESHOLD && isGreen && isBullishMomentum) signals.push({ type: 'CALL', source: 'X-FAST' });
+          else if (data.lastPrice < data.bollinger.lower && data.zScore < -Z_THRESHOLD && !isGreen && isBearishMomentum) signals.push({ type: 'PUT', source: 'X-FAST' });
+        }
+        if (signals.length > 0) {
+          if (requireAll) {
+            const activeCount = (isEmaActive ? 1 : 0) + (isGiraffaActive ? 1 : 0) + (isSafariActive ? 1 : 0) + (isXFastActive ? 1 : 0) + (isSniperActive ? 1 : 0) + (isOlympActive ? 1 : 0);
+            if (signals.length === activeCount && signals.every(s => s.type === signals[0].type)) {
+              const combinedSource = signals.map(s => s.source).join('+');
+              handleTrade(signals[0].type, combinedSource);
+            }
           } else {
-            const type = olympSignal.includes("CALL") ? 'CALL' : 'PUT';
-            signals.push({ type, source: 'WYSETRADE' });
-            log(`WYSETRADE: Pattern ${olympSignal} Detected! ↔️🔱`, 'success');
+            handleTrade(signals[0].type, signals[0].source);
           }
-          return;
-        }
-      }
-
-      // V3.1.78: All strategies below use the unified 1.5s window
-
-      if (isEmaActive && data.crossover && isStartOfCandle) {
-        // Confirmation: Price must be on the correct side of the crossover for a true breakout
-        const breakoutThreshold = 0.0001; // Stabilized V3.1.91
-        const isBullish = data.lastPrice > (data.ema + breakoutThreshold) && data.ema > data.sma;
-        const isBearish = data.lastPrice < (data.ema - breakoutThreshold) && data.ema < data.sma;
-
-        if (data.crossover === "UP" && isBullish) {
-          signals.push({ type: 'CALL', source: 'EMA/SMA' });
-        } else if (data.crossover === "DOWN" && isBearish) {
-          signals.push({ type: 'PUT', source: 'EMA/SMA' });
-        } else if (tickCount % 5 === 0) {
-          log(`EMA/SMA: Crossover detected, waiting for breakout confirmation...`, 'info');
-        }
-      }
-      if (isGiraffaActive && data.fibo && isStartOfCandle) {
-        const price = data.lastPrice;
-        const tolerance = 0.005 / totalSelectivity;
-        const isNear618 = Math.abs(price - data.fibo.l618) <= ((data.fibo.max - data.fibo.min) * tolerance);
-
-        // V3.1.94: Giraffa 2.0 (ADX Trend + EMA Proximity + Fibo Bounce)
-        const isTrendStrong = data.adx > 20;
-        const emaProximity = Math.abs(price - data.sma) / data.sma < 0.003;
-
-        if (isNear618 && isTrendStrong && emaProximity) {
-          const type = price > data.superTrend ? 'CALL' : 'PUT';
-          const isTrendHealthy = (type === 'CALL' && data.smc === "Alcista") || (type === 'PUT' && data.smc === "Bajista");
-          const isBounce = type === 'CALL' ? (data.lastCandle.close > data.lastCandle.open) : (data.lastCandle.close < data.lastCandle.open);
-          const rsiMomentum = type === 'CALL' ? (data.rsi > 45 && data.rsi < 75) : (data.rsi < 55 && data.rsi > 25);
-
-          if (isTrendHealthy && isBounce && rsiMomentum) {
-            signals.push({ type, source: 'GIRAFFA' });
-          }
-        }
-      }
-      if (isSafariActive && isStartOfCandle) {
-        const safariGap = (totalSelectivity - 1.0) * 6; // Reduced from 15x to 6x
-        const rsiHigh = 70 + safariGap;
-        const rsiLow = 30 - safariGap;
-        if (data.safariTrend === "Alcista" && data.smc === "Alcista" && data.lastPrice > data.ichimoku.kijun && data.rsiLaguerre > rsiHigh) signals.push({ type: 'CALL', source: 'SAFARI' });
-        else if (data.safariTrend === "Bajista" && data.smc === "Bajista" && data.lastPrice < data.ichimoku.kijun && data.rsiLaguerre < rsiLow) signals.push({ type: 'PUT', source: 'SAFARI' });
-      }
-      if (isXFastActive && data.bollinger && isStartOfCandle) {
-        const Z_THRESHOLD = 0.8 + ((totalSelectivity - 1.0) * 0.4);
-        const isGreen = data.lastCandle.close > data.lastCandle.open;
-        // V3.1.91: Injected RSI(7) momentum filter to match Safari precision
-        const rsi7 = Indicators.calculateRSI(chartManager.getCloses(), 7);
-        const isBullishMomentum = rsi7 > 60;
-        const isBearishMomentum = rsi7 < 40;
-
-        if (data.lastPrice > data.bollinger.upper && data.zScore > Z_THRESHOLD && isGreen && isBullishMomentum) signals.push({ type: 'CALL', source: 'X-FAST' });
-        else if (data.lastPrice < data.bollinger.lower && data.zScore < -Z_THRESHOLD && !isGreen && isBearishMomentum) signals.push({ type: 'PUT', source: 'X-FAST' });
-      }
-      if (signals.length > 0) {
-        if (requireAll) {
-          const activeCount = (isEmaActive ? 1 : 0) + (isGiraffaActive ? 1 : 0) + (isSafariActive ? 1 : 0) + (isXFastActive ? 1 : 0) + (isSniperActive ? 1 : 0) + (isOlympActive ? 1 : 0);
-          if (signals.length === activeCount && signals.every(s => s.type === signals[0].type)) {
-            const combinedSource = signals.map(s => s.source).join('+');
-            handleTrade(signals[0].type, combinedSource);
-          }
-        } else {
-          handleTrade(signals[0].type, signals[0].source);
         }
       }
     }
+  }
   });
 });
 
@@ -679,6 +686,7 @@ function handleTrade(type, source = "Manual", isManual = false) {
   }
   const market = marketSelect.value;
   tradeInProgress = true;
+  lastTradeStartTime = Date.now(); // V3.1.95
   currentSequenceContractId = 'PENDING';
   log(`DISPATCHING ORDER: ${type} @ $${currentStake.toFixed(2)} (${source})`, 'success');
   const data = chartManager.getLatestIndicators();
