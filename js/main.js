@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.77";
+const V = "3.1.78";
 
 // -- Device Identity Optimization V3.1.72 --
 let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
@@ -418,13 +418,13 @@ btnConnect.addEventListener('click', async () => {
           return;
         }
 
-        // Patience Filters - V3.1.77: Relaxed window (First 12s allowed)
-        const isEntryWindow = (lastServerTime % 60) <= 12;
+        // V3.1.78: Strict Candle Start Sync (Window: 0.0s - 1.5s)
+        const isEntryWindow = (lastServerTime % 60) <= 1.5;
 
         if (recentlyTraded) return;
         if (sniperCooldown > 0) return;
         if (sniperNeedsPullback) return;
-        if (!isEntryWindow) return; // Only at start of candle
+        if (!isEntryWindow) return; // Strictly start of candle
 
         // Fatigue Filters (Avoid Peaks)
 
@@ -463,30 +463,28 @@ btnConnect.addEventListener('click', async () => {
       }
 
 
-      if (isOlympActive && isNewCandle) {
+      // V3.1.78: Unified Sync Window
+      const isStartOfCandle = (lastServerTime % 60) <= 1.5;
+
+      if (isOlympActive && isStartOfCandle) {
         const rsi = data.rsi;
         const olympSignal = Indicators.detectOlympRejection(chartManager.allCandles, data.ema36, data.ema51, data.sma20, data.bollinger, rsi);
 
         if (olympSignal && olympSignal !== "NONE") {
           if (recentlyTraded) {
-            log(`WYSETRADE: ${olympSignal} detectado, pero esperando descanso de mercado. 🧘‍♂️`, 'info');
+            log(`WYSETRADE: Signal detected, market resting... 🧘‍♂️`, 'info');
           } else {
             const type = olympSignal.includes("CALL") ? 'CALL' : 'PUT';
-            const icon = olympSignal.includes("ESCALERA") ? '🪜⚡' : '↔️🔱';
-            const name = olympSignal.includes("ESCALERA") ? 'ESCALERA' : '1 por 1';
-
             signals.push({ type, source: 'WYSETRADE' });
-            handleTrade(type, 'WYSETRADE');
-            log(`WYSETRADE: Patrón ${name} (${type}) Detectado ${icon}`, 'success');
+            log(`WYSETRADE: Pattern ${olympSignal} Detected! ↔️🔱`, 'success');
           }
           return;
         }
       }
 
-      // V3.1.77: Each strategy now handles its own timing window. 
-      // Sniper (above) already uses a 12s window. The ones below use the strict isNewCandle.
+      // V3.1.78: All strategies below use the unified 1.5s window
 
-      if (isEmaActive && data.crossover && isNewCandle) {
+      if (isEmaActive && data.crossover && isStartOfCandle) {
         // Confirmation: Price must be on the correct side of the crossover for a true breakout
         const breakoutThreshold = 0.0001 * totalSelectivity; // Tighter at high levels
         const isBullish = data.lastPrice > (data.ema + breakoutThreshold) && data.ema > data.sma;
@@ -506,14 +504,14 @@ btnConnect.addEventListener('click', async () => {
         const isNear618 = Math.abs(price - data.fibo.l618) <= ((data.fibo.max - data.fibo.min) * tolerance);
         if (isNear618) signals.push({ type: price > data.superTrend ? 'CALL' : 'PUT', source: 'GIRAFFA' });
       }
-      if (isSafariActive && isNewCandle) {
+      if (isSafariActive && isStartOfCandle) {
         const safariGap = (totalSelectivity - 1.0) * 6; // Reduced from 15x to 6x
         const rsiHigh = 70 + safariGap;
         const rsiLow = 30 - safariGap;
         if (data.safariTrend === "Alcista" && data.smc === "Alcista" && data.lastPrice > data.ichimoku.kijun && data.rsiLaguerre > rsiHigh) signals.push({ type: 'CALL', source: 'SAFARI' });
         else if (data.safariTrend === "Bajista" && data.smc === "Bajista" && data.lastPrice < data.ichimoku.kijun && data.rsiLaguerre < rsiLow) signals.push({ type: 'PUT', source: 'SAFARI' });
       }
-      if (isXFastActive && data.bollinger && isNewCandle) {
+      if (isXFastActive && data.bollinger && isStartOfCandle) {
         const Z_THRESHOLD = 0.8 + ((totalSelectivity - 1.0) * 0.4); // Balanced Z-Score (1.2x at L4)
         const isGreen = data.lastCandle.close > data.lastCandle.open;
         if (data.lastPrice > data.bollinger.upper && data.zScore > Z_THRESHOLD && isGreen) signals.push({ type: 'CALL', source: 'X-FAST' });
@@ -644,7 +642,7 @@ function handleTrade(type, source = "Manual", isManual = false) {
     if (tradeInProgress && (currentSequenceContractId === activeContractId || currentSequenceContractId === 'PENDING')) {
       log(`LATCH: Execution lock released (Waiting Sync). Precision Buffed. 🛡️`, 'warning');
       tradeInProgress = false;
-      dynamicSelectivity = Math.min(1.5, dynamicSelectivity + 0.1);
+      dynamicSelectivity = Math.min(1.2, dynamicSelectivity + 0.05);
       updateSummaryPanel();
     }
   }, lockReleaseMs);
