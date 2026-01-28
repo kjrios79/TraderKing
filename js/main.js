@@ -574,8 +574,11 @@ btnConnect.addEventListener('click', async () => {
         const tolerance = 0.005 / totalSelectivity;
         const isNear618 = Math.abs(price - data.fibo.l618) <= ((data.fibo.max - data.fibo.min) * tolerance);
 
-        // V3.1.91: Fibo Bounce Confirmation (Candle Color + RSI Momentum)
-        if (isNear618) {
+        // V3.1.94: Giraffa 2.0 (ADX Trend + EMA Proximity + Fibo Bounce)
+        const isTrendStrong = data.adx > 20;
+        const emaProximity = Math.abs(price - data.sma) / data.sma < 0.003;
+
+        if (isNear618 && isTrendStrong && emaProximity) {
           const type = price > data.superTrend ? 'CALL' : 'PUT';
           const isTrendHealthy = (type === 'CALL' && data.smc === "Alcista") || (type === 'PUT' && data.smc === "Bajista");
           const isBounce = type === 'CALL' ? (data.lastCandle.close > data.lastCandle.open) : (data.lastCandle.close < data.lastCandle.open);
