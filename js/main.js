@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.76";
+const V = "3.1.77";
 
 // -- Device Identity Optimization V3.1.72 --
 let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
@@ -363,8 +363,8 @@ btnConnect.addEventListener('click', async () => {
       const requireAll = checkRequireAll && checkRequireAll.checked;
       const signals = [];
 
-      // Mandatory 1-candle Rest after EVERY trade
-      const recentlyTraded = lastTradeCandleTime !== 0 && (currentMinute <= lastTradeCandleTime + 60);
+      // Mandatory Market Rest: Allow back-to-back if at least 45s passed since last dispatch
+      const recentlyTraded = lastTradeCandleTime !== 0 && (lastServerTime < lastTradeCandleTime + 45);
 
       if (!isEmaActive && !isGiraffaActive && !isSafariActive && !isXFastActive && !isSniperActive && !isOlympActive) {
         if (tickCount % 20 === 0) log('SECURITY: Select an active logic block.', 'error');
@@ -418,10 +418,13 @@ btnConnect.addEventListener('click', async () => {
           return;
         }
 
-        // Patience Filters
+        // Patience Filters - V3.1.77: Relaxed window (First 12s allowed)
+        const isEntryWindow = (lastServerTime % 60) <= 12;
+
+        if (recentlyTraded) return;
         if (sniperCooldown > 0) return;
         if (sniperNeedsPullback) return;
-        if (!isNewCandle) return; // PRO SYNC: Only enter at candle start!
+        if (!isEntryWindow) return; // Only at start of candle
 
         // Fatigue Filters (Avoid Peaks)
 
@@ -480,9 +483,10 @@ btnConnect.addEventListener('click', async () => {
         }
       }
 
-      if (!isNewCandle) return; // GLOBAL PRO SYNC: All strategies below only check at candle start
+      // V3.1.77: Each strategy now handles its own timing window. 
+      // Sniper (above) already uses a 12s window. The ones below use the strict isNewCandle.
 
-      if (isEmaActive && data.crossover) {
+      if (isEmaActive && data.crossover && isNewCandle) {
         // Confirmation: Price must be on the correct side of the crossover for a true breakout
         const breakoutThreshold = 0.0001 * totalSelectivity; // Tighter at high levels
         const isBullish = data.lastPrice > (data.ema + breakoutThreshold) && data.ema > data.sma;
@@ -502,14 +506,14 @@ btnConnect.addEventListener('click', async () => {
         const isNear618 = Math.abs(price - data.fibo.l618) <= ((data.fibo.max - data.fibo.min) * tolerance);
         if (isNear618) signals.push({ type: price > data.superTrend ? 'CALL' : 'PUT', source: 'GIRAFFA' });
       }
-      if (isSafariActive) {
+      if (isSafariActive && isNewCandle) {
         const safariGap = (totalSelectivity - 1.0) * 6; // Reduced from 15x to 6x
         const rsiHigh = 70 + safariGap;
         const rsiLow = 30 - safariGap;
         if (data.safariTrend === "Alcista" && data.smc === "Alcista" && data.lastPrice > data.ichimoku.kijun && data.rsiLaguerre > rsiHigh) signals.push({ type: 'CALL', source: 'SAFARI' });
         else if (data.safariTrend === "Bajista" && data.smc === "Bajista" && data.lastPrice < data.ichimoku.kijun && data.rsiLaguerre < rsiLow) signals.push({ type: 'PUT', source: 'SAFARI' });
       }
-      if (isXFastActive && data.bollinger) {
+      if (isXFastActive && data.bollinger && isNewCandle) {
         const Z_THRESHOLD = 0.8 + ((totalSelectivity - 1.0) * 0.4); // Balanced Z-Score (1.2x at L4)
         const isGreen = data.lastCandle.close > data.lastCandle.open;
         if (data.lastPrice > data.bollinger.upper && data.zScore > Z_THRESHOLD && isGreen) signals.push({ type: 'CALL', source: 'X-FAST' });
