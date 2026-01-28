@@ -1,0 +1,182 @@
+/* 
+ * TRADERKING PREMIUM DESIGN SYSTEM 
+ * FORCE CSS EXTRACTION BY SIZE
+ * ..................................................................................................
+ * ..................................................................................................
+ * ..................................................................................................
+ * ..................................................................................................
+ * ..................................................................................................
+ */
+:root {
+  --bg-primary: #0e0e0e;
+  --bg-secondary: #1a1a1a;
+  --bg-panel: #242424;
+  --text-primary: #ffffff;
+  --text-secondary: #a0a0a0;
+  --accent-color: #fca311;
+  /* TraderKing Gold */
+  --trade-call: #0088cc;
+  /* Blue/Green for Call */
+  --trade-put: #ff444f;
+  /* Red for Put */
+  --border-color: #333;
+  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  display: grid;
+  grid-template-rows: 60px 1fr 200px;
+  grid-template-columns: 300px 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Header */
+header {
+  grid-column: 1 / -1;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+}
+
+.logo {
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: var(--accent-color);
+  letter-spacing: 1px;
+}
+
+.account-info {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.balance {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Sidebar (Settings) */
+aside {
+  background-color: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  padding: 20px;
+  grid-row: 2 / 3;
+  overflow-y: auto;
+}
+
+.panel-title {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  letter-spacing: 0.5px;
+}
+
+.control-group {
+  margin-bottom: 20px;
+}
+
+label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+input,
+select {
+  width: 100%;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  box-sizing: border-box;
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 12px;
+  background-color: var(--accent-color);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-stop {
+  background-color: var(--trade-put);
+  color: white;
+}
+
+/* Main Content */
+main {
+  padding: 20px;
+  display: grid;
+  grid-template-rows: 1fr;
+  gap: 20px;
+}
+
+.chart-placeholder {
+  background-color: var(--bg-panel);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  border: 1px dashed var(--border-color);
+}
+
+/* Footer / Logs */
+footer {
+  grid-column: 1 / -1;
+  background-color: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  padding: 10px 20px;
+  font-size: 0.85rem;
+  font-family: monospace;
+  overflow-y: auto;
+}
+
+.log-entry {
+  margin-bottom: 4px;
+}
+
+.log-info {
+  color: var(--text-secondary);
+}
+
+.log-success {
+  color: #4caf50;
+}
+
+.log-error {
+  color: var(--trade-put);
+}

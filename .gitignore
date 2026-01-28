@@ -1,0 +1,7 @@
+node_modules/
+.vscode/
+.well-known/
+.user.ini
+*.log
+*.tmp
+.DS_Store
