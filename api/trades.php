@@ -16,6 +16,8 @@ $action = $_GET['action'] ?? '';
 
 if ($action === 'save') {
     $contract_id = $_POST['contract_id'] ?? '';
+    $instance_id = $_POST['instance_id'] ?? 'GENERIC';
+    $device_name = $_POST['device_name'] ?? 'Unknown Device';
     $strategy = $_POST['strategy'] ?? '';
     $market = $_POST['market'] ?? '';
     $type = $_POST['type'] ?? '';
@@ -27,13 +29,13 @@ if ($action === 'save') {
         die(json_encode(['error' => 'contract_id is required']));
     }
 
-    $stmt = $conn->prepare("INSERT INTO trades (contract_id, strategy, market, type, stake, profit, status) 
-                            VALUES (?, ?, ?, ?, ?, ?, ?) 
+    $stmt = $conn->prepare("INSERT INTO trades (contract_id, instance_id, device_name, strategy, market, type, stake, profit, status) 
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) 
                             ON DUPLICATE KEY UPDATE 
                             strategy = VALUES(strategy), 
                             profit = VALUES(profit), 
                             status = VALUES(status)");
-    $stmt->bind_param("ssssdds", $contract_id, $strategy, $market, $type, $stake, $profit, $status);
+    $stmt->bind_param("ssssssdds", $contract_id, $instance_id, $device_name, $strategy, $market, $type, $stake, $profit, $status);
 
     if ($stmt->execute()) {
         echo json_encode(['success' => true]);
@@ -43,7 +45,16 @@ if ($action === 'save') {
     $stmt->close();
 
 } elseif ($action === 'fetch') {
-    $result = $conn->query("SELECT * FROM trades WHERE status != 'PENDING' ORDER BY timestamp DESC LIMIT 30");
+    $instance_id = $_GET['instance_id'] ?? '';
+    $query = "SELECT * FROM trades WHERE status != 'PENDING'";
+    
+    if (!empty($instance_id)) {
+        $query .= " AND instance_id = '" . $conn->real_escape_string($instance_id) . "'";
+    }
+    
+    $query .= " ORDER BY timestamp DESC LIMIT 30";
+    
+    $result = $conn->query($query);
     $trades = [];
     while ($row = $result->fetch_assoc()) {
         $trades[] = $row;

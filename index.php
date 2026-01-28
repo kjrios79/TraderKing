@@ -253,6 +253,8 @@ $v = time();
           <div class="panel-content">
             <label>App ID</label>
             <input type="text" id="app-id" placeholder="Your App ID">
+            <label>Device Name (Identification)</label>
+            <input type="text" id="device-name-input" placeholder="e.g. My Laptop">
             <label>API Token</label>
             <input type="password" id="api-token" placeholder="Your API Token">
             <button id="btn-connect">Connect / Save</button>

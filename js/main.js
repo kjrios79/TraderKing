@@ -2,7 +2,14 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.71";
+const V = "3.1.72";
+
+// -- Device Identity Optimization V3.1.72 --
+let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
+localStorage.setItem('tk_instance_id', instanceId);
+let deviceName = localStorage.getItem('tk_device_name') || 'Main PC';
+localStorage.setItem('tk_device_name', deviceName);
+
 const formatCurrency = (val) => {
   // Robust currency formatter: strip any existing $ and parse the number safely
   if (typeof val === 'string') val = val.replace(/[$,]/g, '');
@@ -667,13 +674,10 @@ function handleContractResult(data) {
       myLocalContractIds.add(contractId);
       log(`LINK SUCCESS: Row identified as LOCAL ${contractId}. 🔗`, 'info');
     } else if (!isPreviouslyTracked) {
-      // It's a completely new ID we didn't expect: EXTERNAL
-      const type = (data.contract_type || 'NONE').includes('CALL') ? 'CALL' : 'PUT';
-      const market = data.display_name || 'SYNC';
-      const stake = data.buy_price || 0;
-      row = addHistoryRow('EXTERNAL SYNC', market, type, stake);
-      row.dataset.contractId = contractId;
-      log(`EXTERNAL SYNC: Tracking trade from another device (${contractId}). 🌐`, 'info');
+      // V3.1.72: Respect Multi-Device Isolation
+      // Only track if it belongs to us. Hide "EXTERNAL SYNC" to avoid clumping metrics.
+      log(`SYNC: External trade detected (${contractId}). Isolated. 🛡️`, 'info');
+      return;
     }
   }
 
@@ -871,12 +875,16 @@ function updateHistoryResult(row, isWin, profit) {
 function saveTradeToDB(tradeData) {
   const formData = new FormData();
   for (const key in tradeData) formData.append(key, tradeData[key]);
+  // Add Identity
+  formData.append('instance_id', instanceId);
+  formData.append('device_name', deviceName);
+
   fetch('/api/trades.php?action=save', { method: 'POST', body: formData })
     .catch(err => console.error("DB Save Error:", err));
 }
 
 function fetchHistoricalTrades() {
-  fetch('/api/trades.php?action=fetch')
+  fetch(`/api/trades.php?action=fetch&instance_id=${instanceId}`)
     .then(r => r.json())
     .then(trades => {
       if (Array.isArray(trades)) {
@@ -903,6 +911,7 @@ function saveSettings() {
   if (currentLevel === 1) currentStake = parseFloat(stake) || 1.0;
   const settings = {
     market: marketSelect.value,
+    deviceName: document.getElementById('device-name-input').value || 'Main PC',
     stake: stake,
     duration: document.getElementById('duration').value,
     durationUnit: document.getElementById('duration-unit').value,
@@ -921,6 +930,8 @@ function saveSettings() {
       sniperTarget: document.getElementById('sniper-target') ? document.getElementById('sniper-target').value : 8
     }
   };
+  deviceName = settings.deviceName;
+  localStorage.setItem('tk_device_name', deviceName);
   localStorage.setItem('tk_settings', JSON.stringify(settings));
   updateSummaryPanel();
 }
@@ -980,6 +991,9 @@ function updateSummaryPanel() {
 
 
   summaryEl.innerHTML = `
+    <div style="font-size:0.65rem; color:#f0b90b; margin-bottom:5px; text-transform:uppercase; letter-spacing:1px; border-bottom:1px solid rgba(240,185,11,0.2); padding-bottom:2px;">
+      Device: <span style="color:white; font-weight:bold;">${deviceName}</span> 💻
+    </div>
     <div style="display:flex; justify-content:space-between; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:5px;">
         <div>Market: <strong style="color:white">${market}</strong></div>
         <div>Active Stake: <strong style="color:#f0b90b">${formatCurrency(parseFloat(currentStake) || 0)}</strong></div>
@@ -1049,6 +1063,11 @@ function loadSettings() {
   try {
     const s = JSON.parse(saved);
     if (s.market) marketSelect.value = s.market;
+    if (s.deviceName) {
+      deviceName = s.deviceName;
+      localStorage.setItem('tk_device_name', deviceName);
+      if (document.getElementById('device-name-input')) document.getElementById('device-name-input').value = deviceName;
+    }
     if (s.stake) {
       const sVal = parseFloat(s.stake) || 1.0;
       document.getElementById('stake').value = sVal.toFixed(2);
@@ -1182,6 +1201,10 @@ setInterval(() => {
 // V3.1.65: UI Polish - Focus/Blur Decimal Enforcement
 document.getElementById('stake').addEventListener('blur', function () {
   this.value = parseFloat(this.value || 0).toFixed(2);
+  saveSettings();
+});
+
+document.getElementById('device-name-input').addEventListener('blur', function () {
   saveSettings();
 });
 
