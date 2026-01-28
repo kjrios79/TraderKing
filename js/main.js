@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.67";
+const V = "3.1.71";
 const formatCurrency = (val) => {
   // Robust currency formatter: strip any existing $ and parse the number safely
   if (typeof val === 'string') val = val.replace(/[$,]/g, '');
@@ -622,8 +622,8 @@ function handleTrade(type, source = "Manual", isManual = false) {
   // REMOVED: saveTradeToDB with PENDING_... temp ID to avoid duplicates.
   // The real contract_id will be saved by handleContractResult as soon as 'buy' or 'proposal_open_contract' returns it.
 
-  // Dynamic Latch: Duration + 90s safety margin (increased for stability)
-  const timeoutMs = (durationUnit === 'm' ? duration * 60 : duration) * 1000 + 90000;
+  // Dynamic Latch: Duration + 5m safety margin (Increased for robustness V3.1.69)
+  const timeoutMs = (durationUnit === 'm' ? duration * 60 : duration) * 1000 + 300000;
   log(`LATCH ENGAGED: Waiting up to ${timeoutMs / 1000}s for settlement. 🛡️`, 'info');
 
   tradeTimeout = setTimeout(() => {
@@ -715,16 +715,18 @@ function handleContractResult(data) {
   if (status !== 'won' && status !== 'lost') {
     if (isSold) {
       log(`SYNC: Contract ${contractId} finished with ambiguous status. Releasing lock. 🛡️`, 'warning');
-      tradeInProgress = false;
-      currentSequenceContractId = null;
+      if (currentSequenceContractId === contractId) {
+        tradeInProgress = false;
+        currentSequenceContractId = null;
+      }
       row.classList.remove('trade-pending');
       if (row.cells[5]) row.cells[5].innerHTML = `<span style="color:#848e9c">Finalizing...</span>`;
     }
     return;
   }
 
-  // CRITICAL guard: only process settlement once
-  if (!row.classList.contains('trade-pending')) return;
+  // CRITICAL guard: only process settlement once (V3.1.69: Allow late settlement after timeout)
+  if (row.dataset.settled === 'true') return;
 
   if (status === 'won' || status === 'lost') {
     if (tradeTimeout) { clearTimeout(tradeTimeout); tradeTimeout = null; }
@@ -756,6 +758,7 @@ function handleContractResult(data) {
     }
 
     updateHistoryResult(row, isWin, profit);
+    row.dataset.settled = 'true';
     row.classList.remove('trade-pending');
 
     saveTradeToDB({
@@ -820,9 +823,12 @@ function handleContractResult(data) {
       currentLevel = 1;
     }
 
-    // V3.1.65: ABSOLUTE LOCK RELEASE
-    tradeInProgress = false;
-    currentSequenceContractId = null;
+    // V3.1.71: Only release global lock if this is actually the current active trade
+    if (currentSequenceContractId === contractId) {
+      tradeInProgress = false;
+      currentSequenceContractId = null;
+    }
+
     lastPendingTradeRow = null;
     tradeStartTime = 0;
 
@@ -1124,15 +1130,25 @@ setInterval(() => {
     const now = Date.now();
     const pendingRows = document.querySelectorAll('tr.trade-pending');
     pendingRows.forEach(r => {
-      if (tradeStartTime > 0 && (now - tradeStartTime) > 120000) { // 2 Minutes
+      const createTime = parseInt(r.dataset.createTime) || tradeStartTime;
+      if (createTime > 0 && (now - createTime) > 300000) { // 5 Minutes (V3.1.69)
         log(`LATCH FAILSAFE: Auto-settled timed-out trade ${r.dataset.contractId}. 🛡️`, 'warning');
         const cell = r.cells[5];
         const cid = r.dataset.contractId || 'TIMEOUT_' + now;
         if (cell) cell.innerHTML = `<span style="color: #ff9800; font-weight: bold;">TIMEOUT</span>`;
         r.classList.remove('trade-pending');
-        tradeInProgress = false; // RELEASE LOCK ABSOLUTELY
-        currentSequenceContractId = null;
-        pendingRowsQueue = pendingRowsQueue.filter(pr => pr !== r);
+
+        // V3.1.71: Automatic Precision Increase on Timeout (User Request)
+        dynamicSelectivity = Math.min(1.3, dynamicSelectivity + 0.1);
+        log(`TIMEOUT: Increasing Precision to ${dynamicSelectivity.toFixed(2)}x for next entry. 🎯`, 'warning');
+
+        if (currentSequenceContractId === r.dataset.contractId) {
+          tradeInProgress = false; // RELEASE LOCK if it's the current one
+          currentSequenceContractId = null;
+        }
+        // V3.1.70: Keep in queue so we can still link the ID if it arrives late
+        // pendingRowsQueue = pendingRowsQueue.filter(pr => pr !== r); 
+
 
         // V3.1.66: Persist timeout to DB to avoid "Pending" on refresh
         saveTradeToDB({

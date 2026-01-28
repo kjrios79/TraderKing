@@ -13,7 +13,7 @@ $v = time();
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>TraderKing Pro Bot V3.1.67-STABLE [ORACLE-PRO]</title>
+    <title>TraderKing Pro Bot V3.1.71-STABLE [ORACLE-PRO]</title>
     
     <!-- External Dependencies -->
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
@@ -218,7 +218,7 @@ $v = time();
     <div id="mobile-backdrop"></div>
     <header>
       <button id="menu-toggle">☰</button>
-      <div class="logo">TRADERKING <span style="font-size:0.8rem; background:#f0b90b; color:#000; padding:2px 8px; border-radius:4px; font-weight:bold; margin-left:10px;">V3.1.67</span></div>
+      <div class="logo">TRADERKING <span style="font-size:0.8rem; background:#f0b90b; color:#000; padding:2px 8px; border-radius:4px; font-weight:bold; margin-left:10px;">V3.1.71</span></div>
       
       <!-- Market Oracle (Recommendation System) -->
       <div id="market-oracle" style="margin-left: 15px; background: rgba(240,185,11,0.05); border: 1px solid rgba(240,185,11,0.2); padding: 4px 12px; border-radius: 4px; font-size: 0.7rem; color: #f0b90b; min-width: 150px; display: flex; align-items: center; gap: 8px;">
