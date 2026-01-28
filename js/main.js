@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.78";
+const V = "3.1.80";
 
 // -- Device Identity Optimization V3.1.72 --
 let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
@@ -140,6 +140,7 @@ class SniperCognition {
 const AI_Library = new SniperCognition();
 let lastSnapshot = null;
 let botStartTime = Date.now();
+let lastBalanceUpdate = Date.now();
 
 // -- Core Helpers --
 function log(msg, type = 'info') {
@@ -266,7 +267,8 @@ btnConnect.addEventListener('click', async () => {
   connection.on('balance', (data) => {
     if (balanceEl) balanceEl.textContent = `${data.currency} ${num(data.balance)}`;
     currentBalance = parseFloat(data.balance);
-    updateSummaryPanel(); // Real-time balance update in summary
+    lastBalanceUpdate = Date.now(); // Watchdog Heartbeat
+    updateSummaryPanel();
   });
   connection.on('contract', (data) => {
     handleContractResult(data);
@@ -340,6 +342,13 @@ btnConnect.addEventListener('click', async () => {
 
     const isSequentialReq = document.getElementById('sequential-mode').checked;
     if (botRunning && isAuthorized && (isSequentialReq ? !tradeInProgress : true)) {
+      // V3.1.80: Balance Watchdog
+      if (tickCount % 30 === 0 && (Date.now() - lastBalanceUpdate > 60000)) {
+        log('WATCHDOG: Balance stale. Re-syncing... 🔄', 'warning');
+        connection.send({ balance: 1, subscribe: 1 });
+        lastBalanceUpdate = Date.now(); // Reset to wait for next sync
+      }
+
       tickCount++;
 
       const data = chartManager.getLatestIndicators();
@@ -638,12 +647,20 @@ function handleTrade(type, source = "Manual", isManual = false) {
   const activeContractId = currentSequenceContractId;
   const lockReleaseMs = (durationUnit === 'm' ? duration * 60 : duration) * 1000 + 45000;
   setTimeout(() => {
-    // Only release if the lock is still held by the SAME trade or still in PENDING state
+    // V3.1.80: Panic Reset Logic
     if (tradeInProgress && (currentSequenceContractId === activeContractId || currentSequenceContractId === 'PENDING')) {
-      log(`LATCH: Execution lock released (Waiting Sync). Precision Buffed. 🛡️`, 'warning');
+      log(`LATCH: Execution lock released (Panic Reset). Precision Buffed. 🛡️`, 'error');
       tradeInProgress = false;
+      currentSequenceContractId = null; // FORCE CLEAR for next entries
       dynamicSelectivity = Math.min(1.2, dynamicSelectivity + 0.05);
       updateSummaryPanel();
+
+      // Cleanup UI if still pending
+      if (row && row.classList.contains('trade-pending')) {
+        const cell = row.cells[5];
+        if (cell) cell.innerHTML = `<span style="color:#848e9c; font-size:0.65rem;">TIMEOUT / SYNC LOSS</span>`;
+        row.classList.remove('trade-pending');
+      }
     }
   }, lockReleaseMs);
 
