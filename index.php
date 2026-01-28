@@ -218,7 +218,7 @@ $v = time();
     <div id="mobile-backdrop"></div>
     <header>
       <button id="menu-toggle">☰</button>
-      <div class="logo">TRADERKING <span style="font-size:0.8rem; background:#f0b90b; color:#000; padding:2px 8px; border-radius:4px; font-weight:bold; margin-left:10px;">V3.1.75</span></div>
+      <div class="logo">TRADERKING <span style="font-size:0.8rem; background:#f0b90b; color:#000; padding:2px 8px; border-radius:4px; font-weight:bold; margin-left:10px;">V3.1.76</span></div>
       
       <!-- Market Oracle (Recommendation System) -->
       <div id="market-oracle" style="margin-left: 15px; background: rgba(240,185,11,0.05); border: 1px solid rgba(240,185,11,0.2); padding: 4px 12px; border-radius: 4px; font-size: 0.7rem; color: #f0b90b; min-width: 150px; display: flex; align-items: center; gap: 8px;">

@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.75";
+const V = "3.1.76";
 
 // -- Device Identity Optimization V3.1.72 --
 let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
@@ -603,18 +603,21 @@ function handleTrade(type, source = "Manual", isManual = false) {
   if (durationUnit !== 't' && tradeTimerEl) {
     const seconds = durationUnit === 'm' ? duration * 60 : duration;
     activeTradeEndTime = Date.now() + (seconds * 1000);
-    tradeTimerEl.style.display = 'block';
-    if (tradeTimerInterval) clearInterval(tradeTimerInterval);
-    tradeTimerInterval = setInterval(() => {
-      const remaining = Math.max(0, Math.round((activeTradeEndTime - Date.now()) / 1000));
-      const m = Math.floor(remaining / 60);
-      const s = remaining % 60;
-      tradeTimerEl.textContent = `TRADE: ${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-      if (remaining <= 0) {
-        clearInterval(tradeTimerInterval);
-        tradeTimerEl.style.display = 'none';
-      }
-    }, 1000);
+    if (tradeTimerEl) {
+      tradeTimerEl.style.display = 'block';
+      tradeTimerEl.style.zIndex = '9999'; // Ensure visibility
+      if (tradeTimerInterval) clearInterval(tradeTimerInterval);
+      tradeTimerInterval = setInterval(() => {
+        const remaining = Math.max(0, Math.round((activeTradeEndTime - Date.now()) / 1000));
+        const m = Math.floor(remaining / 60);
+        const s = remaining % 60;
+        tradeTimerEl.textContent = `TRADE: ${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        if (remaining <= 0) {
+          clearInterval(tradeTimerInterval);
+          tradeTimerEl.style.display = 'none';
+        }
+      }, 1000);
+    }
   } else if (tradeTimerEl) {
     tradeTimerEl.style.display = 'none';
   }
