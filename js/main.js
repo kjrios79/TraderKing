@@ -625,7 +625,6 @@ btnConnect.addEventListener('click', async () => {
         }
       }
     }
-  }
   });
 });
 
