@@ -1,4 +1,5 @@
 <?php
+date_default_timezone_set('America/Bogota');
 session_start();
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -12,6 +13,7 @@ $dbname = 'traderking';
 
 $conn = new mysqli($host, $user, $pass, $dbname);
 if ($conn->connect_error) die("DB Error");
+$conn->query("SET time_zone = '-05:00'");
 
 // Fetch User Config for Live Balance
 $user_id = $_SESSION['user_id'];
@@ -26,9 +28,14 @@ $devices = [];
 while($row = $device_res->fetch_assoc()) $devices[] = $row;
 
 $selected_instance = $_GET['instance_id'] ?? '';
+$selected_date = $_GET['date'] ?? date('Y-m-d');
+
 $where_clause = "status != 'PENDING'";
 if (!empty($selected_instance)) {
     $where_clause .= " AND instance_id = '" . $conn->real_escape_string($selected_instance) . "'";
+}
+if (!empty($selected_date)) {
+    $where_clause .= " AND DATE(timestamp) = '" . $conn->real_escape_string($selected_date) . "'";
 }
 
 // Fetch strategy stats with total count
@@ -84,7 +91,7 @@ $trades_res = $conn->query("SELECT * FROM trades WHERE $where_clause ORDER BY ti
         <h1 style="display:flex; align-items:center; justify-content: space-between; gap:10px; margin-bottom: 25px;">
             <div style="display:flex; align-items:center; gap:10px;">
                 <span style="color:#f0b90b">Shielded History</span> 
-                <span style="font-size:0.8rem; background:#f0b90b; color:#000; padding:2px 8px; border-radius:4px; font-weight:bold;">V3.1.99</span>
+                <span style="font-size:0.8rem; background:#f0b90b; color:#000; padding:2px 8px; border-radius:4px; font-weight:bold;">V3.2.01</span>
             </div>
             <div style="display:flex; gap:15px;">
                 <div style="background: rgba(255,184,0,0.1); border: 1px solid rgba(255,184,0,0.3); padding: 5px 15px; border-radius: 8px; font-size: 1rem; color: #ffb800; display:none;" id="balance-box">
@@ -103,15 +110,23 @@ $trades_res = $conn->query("SELECT * FROM trades WHERE $where_clause ORDER BY ti
         </h1>
 
         <div class="filter-box">
-            <span style="color:#848e9c; font-size: 0.8rem; font-weight: bold;">FILTRAR POR EQUIPO:</span>
-            <select onchange="window.location.href='?instance_id=' + this.value">
-                <option value="">Todos los Equipos (Global)</option>
-                <?php foreach($devices as $d): ?>
-                    <option value="<?php echo $d['instance_id']; ?>" <?php echo $selected_instance == $d['instance_id'] ? 'selected' : ''; ?>>
-                        <?php echo $d['device_name']; ?> (<?php echo $d['instance_id']; ?>)
-                    </option>
-                <?php endforeach; ?>
-            </select>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="color:#848e9c; font-size: 0.8rem; font-weight: bold;">EQUIPO:</span>
+                <select id="filter-instance" onchange="updateFilters()" style="margin-bottom:0;">
+                    <option value="">Todos los Equipos</option>
+                    <?php foreach($devices as $d): ?>
+                        <option value="<?php echo $d['instance_id']; ?>" <?php echo $selected_instance == $d['instance_id'] ? 'selected' : ''; ?>>
+                            <?php echo $d['device_name']; ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            
+            <div style="display:flex; align-items:center; gap:10px; margin-left: 10px; padding-left: 20px; border-left: 1px solid #333;">
+                <span style="color:#848e9c; font-size: 0.8rem; font-weight: bold;">FECHA:</span>
+                <input type="date" id="filter-date" value="<?php echo $selected_date; ?>" onchange="updateFilters()" style="background:#0b0e11; color:white; border:1px solid #444; padding:7px 10px; border-radius:4px; outline:none; font-size:0.8rem;">
+                <button onclick="document.getElementById('filter-date').value='<?php echo date('Y-m-d'); ?>'; updateFilters();" style="background:#2b2f36; color:#f0b90b; border:1px solid #444; padding:7px 10px; border-radius:4px; font-size:0.7rem; cursor:pointer;">Hoy</button>
+            </div>
         </div>
         
         <div class="stat-grid">
@@ -188,6 +203,12 @@ $trades_res = $conn->query("SELECT * FROM trades WHERE $where_clause ORDER BY ti
         </table>
     </div>
     <script>
+        function updateFilters() {
+            const inst = document.getElementById('filter-instance').value;
+            const date = document.getElementById('filter-date').value;
+            window.location.href = `?instance_id=${inst}&date=${date}`;
+        }
+
         const appId = "<?php echo $app_id; ?>";
         const token = "<?php echo $token; ?>";
         

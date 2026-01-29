@@ -1,4 +1,5 @@
 <?php
+date_default_timezone_set('America/Bogota');
 // api/auth.php
 session_start();
 require_once '../includes/db.php';

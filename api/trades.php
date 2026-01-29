@@ -1,4 +1,5 @@
 <?php
+date_default_timezone_set('America/Bogota');
 header('Content-Type: application/json');
 
 $host = 'localhost';
@@ -11,6 +12,7 @@ $conn = new mysqli($host, $user, $pass, $dbname);
 if ($conn->connect_error) {
     die(json_encode(['error' => "Connection failed: " . $conn->connect_error]));
 }
+$conn->query("SET time_zone = '-05:00'");
 
 $action = $_GET['action'] ?? '';
 

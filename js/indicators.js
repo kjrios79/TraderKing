@@ -4,6 +4,7 @@
 export const Indicators = {
     // --- LOOKBACK LIMITER ---
     limit(arr, period = 300) {
+        if (!arr || !Array.isArray(arr)) return [];
         return arr.length > period ? arr.slice(-period) : arr;
     },
 
@@ -23,6 +24,21 @@ export const Indicators = {
             ema = (slice[i] * k) + (ema * (1 - k));
         }
         return ema;
+    },
+
+    calculateDEMA(prices, period) {
+        if (prices.length < period + 1) return 0;
+        const ema1 = this.calculateEMA(prices, period);
+        const ema2 = this.calculateEMA(prices.slice(0, -1), period);
+        return 2 * ema1 - ema2;
+    },
+
+    calculateTEMA(prices, period) {
+        if (prices.length < period + 2) return 0;
+        const ema1 = this.calculateEMA(prices, period);
+        const ema2 = this.calculateEMA(prices.slice(0, -1), period);
+        const ema3 = this.calculateEMA(prices.slice(0, -2), period);
+        return 3 * (ema1 - ema2) + ema3;
     },
 
     // --- SECONDARY INDICATORS ---
@@ -97,6 +113,23 @@ export const Indicators = {
         return dxValues.slice(-period).reduce((a, b) => a + b, 0) / period;
     },
 
+    calculatePSAR(prices, step = 0.02, maxStep = 0.2) {
+        if (prices.length < 5) return 0;
+        let sar = prices[0], ep = prices[0], af = step, trend = 1;
+        for (let i = 1; i < prices.length; i++) {
+            const price = prices[i];
+            sar = sar + af * (ep - sar);
+            if (trend === 1) {
+                if (price < sar) { trend = -1; sar = ep; ep = price; af = step; }
+                else if (price > ep) { ep = price; af = Math.min(af + step, maxStep); }
+            } else {
+                if (price > sar) { trend = 1; sar = ep; ep = price; af = step; }
+                else if (price < ep) { ep = price; af = Math.min(af + step, maxStep); }
+            }
+        }
+        return sar;
+    },
+
     calculateBollinger(prices, period, deviation) {
         const slice = this.limit(prices, period);
         if (slice.length < period) return null;
@@ -132,12 +165,66 @@ export const Indicators = {
     },
 
     detectSMC(prices) {
-        // V3.1.99: Balanced SMC using 5-period average to filter tick noise
-        const slice = prices.slice(-6);
-        if (slice.length < 6) return "Neutral";
-        const avgNow = (slice[5] + slice[4] + slice[3]) / 3;
-        const avgPrev = (slice[2] + slice[1] + slice[0]) / 3;
-        return avgNow > avgPrev ? "Alcista" : (avgNow < avgPrev ? "Bajista" : "Neutral");
+        if (prices.length < 2) return "Neutral";
+        const last = prices[prices.length - 1];
+        const prev = prices[prices.length - 2];
+        return last > prev ? "Alcista" : (last < prev ? "Bajista" : "Neutral");
+    },
+
+    calculateSuperTrend(highs, lows, closes, period, factor) {
+        const atr = this.calculateATR(highs, lows, closes, period);
+        const slice = closes.slice(-period);
+        if (slice.length < period) return 0;
+        const medium = (Math.max(...highs.slice(-period)) + Math.min(...lows.slice(-period))) / 2;
+        return medium - (factor * atr);
+    },
+
+    detectCrossover(shortValues, longValues) {
+        if (shortValues.length < 2 || longValues.length < 2) return null;
+        const s0 = shortValues[shortValues.length - 1];
+        const s1 = shortValues[shortValues.length - 2];
+        const l0 = longValues[longValues.length - 1];
+        const l1 = longValues[longValues.length - 2];
+        if (s1 <= l1 && s0 > l0) return "UP";
+        if (s1 >= l1 && s0 < l0) return "DOWN";
+        return null;
+    },
+
+    calculateFisher(prices, period) {
+        if (prices.length < period) return 0;
+        const slice = prices.slice(-period);
+        const min = Math.min(...slice), max = Math.max(...slice);
+        if (max === min) return 0;
+        let val = 2 * ((prices[prices.length - 1] - min) / (max - min) - 0.5);
+        if (val > 0.99) val = 0.999;
+        if (val < -0.99) val = -0.999;
+        return 0.5 * Math.log((1 + val) / (1 - val));
+    },
+
+    detectCandleForce(open, close, high, low) {
+        const body = Math.abs(close - open);
+        const upperWick = high - Math.max(open, close);
+        const lowerWick = Math.min(open, close) - low;
+        const threshold = body * 0.5;
+        if (body > upperWick && body > lowerWick) return close > open ? "Fuerza Alcista" : "Fuerza Bajista";
+        else if (upperWick > threshold) return "Fuerza Bajista";
+        else if (lowerWick > threshold) return "Fuerza Alcista";
+        return "Sin Fuerza Clara";
+    },
+
+    calculateIchimoku(highs, lows, tenkanPeriod = 9, kijunPeriod = 26, senkouBPeriod = 52) {
+        if (highs.length < senkouBPeriod) return null;
+        const getMid = (h, l, p) => {
+            const hSlice = h.slice(-p);
+            const lSlice = l.slice(-p);
+            return (Math.max(...hSlice) + Math.min(...lSlice)) / 2;
+        };
+        return { tenkan: getMid(highs, lows, tenkanPeriod), kijun: getMid(highs, lows, kijunPeriod), senkouB: getMid(highs, lows, senkouBPeriod) };
+    },
+
+    calculateAlligator(prices, jawP = 13, teethP = 8, lipsP = 5) {
+        if (prices.length < jawP) return null;
+        return { jaw: this.calculateSMA(prices, jawP), teeth: this.calculateSMA(prices, teethP), lips: this.calculateSMA(prices, lipsP) };
     },
 
     calculateSafariTrend(prices) {
@@ -151,6 +238,7 @@ export const Indicators = {
     },
 
     detectSniperWick(candle) {
+        if (!candle) return "NONE";
         const body = Math.abs(candle.close - candle.open);
         const total = candle.high - candle.low;
         if (total === 0) return "NONE";
@@ -159,6 +247,26 @@ export const Indicators = {
         if (upper / total > 0.65) return "UPPER_REJECTION";
         if (lower / total > 0.65) return "LOWER_REJECTION";
         return "NONE";
+    },
+
+    calculateMarketForce(highs, lows, period = 14) {
+        if (highs.length < period) return 1.0;
+        let sumRange = 0;
+        for (let i = highs.length - period; i < highs.length; i++) {
+            sumRange += (highs[i] - lows[i]);
+        }
+        const avgRange = sumRange / period;
+        return avgRange > 0 ? ((highs[highs.length - 1] - lows[lows.length - 1]) / avgRange) : 1.0;
+    },
+
+    calculateMACDSignal(macdValues, period) {
+        if (macdValues.length < period) return 0;
+        const k = 2 / (period + 1);
+        let signal = macdValues[macdValues.length - period];
+        for (let i = macdValues.length - period + 1; i < macdValues.length; i++) {
+            signal = (macdValues[i] * k) + (signal * (1 - k));
+        }
+        return signal;
     },
 
     detectOlympRejection(candles, ema36, ema51, sma20, rsi) {
@@ -180,5 +288,17 @@ export const Indicators = {
         if (h.length < period) return null;
         const max = Math.max(...h), min = Math.min(...l), diff = max - min;
         return { max, min, l618: max - (diff * 0.618), l500: max - (diff * 0.5), l382: max - (diff * 0.382) };
+    },
+
+    scanPatternHistory(candles, lookback = 100) {
+        if (candles.length < lookback) lookback = candles.length;
+        let count = 0;
+        for (let i = candles.length - lookback; i < candles.length - 3; i++) {
+            const h1 = candles[i], h2 = candles[i + 1], h3 = candles[i + 2];
+            const successUnoCall = (h1.close > h1.open && h2.close < h2.open && h2.low >= h1.open && h3.close > h3.open);
+            const successUnoPut = (h1.close < h1.open && h2.close > h2.open && h2.high <= h1.open && h3.close < h3.open);
+            if (successUnoCall || successUnoPut) count++;
+        }
+        return count;
     }
 };

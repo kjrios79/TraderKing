@@ -38,6 +38,7 @@ export class ChartManager {
                     secondsVisible: false, // Cleaner look
                     barSpacing: 6, // Optimal zoom: ~3 mins on desktop, ~1 min on mobile
                     minBarSpacing: 5,
+                    rightOffset: 12, // V3.2.01: Added breathing room on the right
                     rightBarStaysOnScroll: true,
                     tickMarkFormatter: (time, tickMarkType, locale) => {
                         const date = new Date(time * 1000);
@@ -163,7 +164,8 @@ export class ChartManager {
             if (visibleRange) {
                 const lastTime = this.allCandles[this.allCandles.length - 1].time;
                 if (lastTime >= visibleRange.to - 60) {
-                    timeScale.scrollToPosition(0, true);
+                    // V3.2.01: Maintain the right offset when auto-scrolling
+                    timeScale.scrollToPosition(12, true);
                 }
             }
         } catch (e) { }
@@ -241,7 +243,7 @@ export class ChartManager {
             tema: Indicators.calculateTEMA(prices, 10),
             zScore: Indicators.calculateZScore(prices, 20),
             rsiLaguerre: Indicators.calculateRSILaguerre(prices, 0.2),
-            superTrend: Indicators.calculateSuperTrend(prices, 10, 3),
+            superTrend: Indicators.calculateSuperTrend(highs, lows, prices, 10, 3),
             smc: Indicators.detectSMC(prices),
             crossover: Indicators.detectCrossover(
                 this.allCandles.slice(-50).map(c => Indicators.calculateEMA(this.allCandles.slice(0, this.allCandles.indexOf(c) + 1).map(x => x.close), 10)),
