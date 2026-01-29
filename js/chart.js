@@ -155,6 +155,17 @@ export class ChartManager {
             }
             if (this.allCandles.length > 1500) this.allCandles.shift();
             this.updateIndicators();
+
+            // V3.1.98: Strategic Auto-Scroll
+            // Only scroll if we are near the edge to avoid fighting user scrolls
+            const timeScale = this.chart.timeScale();
+            const visibleRange = timeScale.getVisibleRange();
+            if (visibleRange) {
+                const lastTime = this.allCandles[this.allCandles.length - 1].time;
+                if (lastTime >= visibleRange.to - 60) {
+                    timeScale.scrollToPosition(0, true);
+                }
+            }
         } catch (e) { }
     }
 

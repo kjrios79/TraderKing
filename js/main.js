@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.97";
+const V = "3.1.98";
 
 // -- Device Identity Optimization V3.1.72 --
 let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
@@ -414,7 +414,10 @@ btnConnect.addEventListener('click', async () => {
     }
 
     // V3.1.82: Unified Global Sync Gate
-    const isStartOfCandle = (lastServerTime % 60) <= 1.5;
+    // V3.1.98: Precision Entry Window (0.5s to 4.0s)
+    // We give the candle a few seconds to "show its strength" before committing.
+    const candleSeconds = (lastServerTime % 60);
+    const isStartOfCandle = candleSeconds >= 0.5 && candleSeconds <= 4.0;
 
     if (botRunning && isAuthorized) {
       tickCount++;
@@ -426,7 +429,7 @@ btnConnect.addEventListener('click', async () => {
       const last10Bodies = chartManager.allCandles.slice(-11, -1).map(c => Math.abs(c.close - c.open));
       const avgBodySize = last10Bodies.length > 0 ? (last10Bodies.reduce((a, b) => a + b, 0) / last10Bodies.length) : 0;
       const currentPush = (parseFloat(data.lastPrice) - parseFloat(data.lastCandle.open));
-      const MIN_PUSH_THRESHOLD = avgBodySize * 0.15;
+      const MIN_PUSH_THRESHOLD = avgBodySize * 0.08; // Reduced V3.1.98 (8% of avg candle)
 
       if (tickCount % 30 === 0 && (Date.now() - lastBalanceUpdate > 60000)) {
         log('WATCHDOG: Balance stale. Re-syncing... 🔄', 'warning');
@@ -578,6 +581,11 @@ function handleTrade(type, source = "Manual", isManual = false) {
   }
   const market = marketSelect.value;
   tradeInProgress = true;
+
+  // Chart Sync V3.1.98: Anchor to end on trade
+  if (chartManager && chartManager.chart) {
+    chartManager.chart.timeScale().scrollToPosition(0, true);
+  }
   lastTradeStartTime = Date.now(); // V3.1.95
   currentSequenceContractId = 'PENDING';
   log(`DISPATCHING ORDER: ${type} @ $${currentStake.toFixed(2)} (${source})`, 'success');
