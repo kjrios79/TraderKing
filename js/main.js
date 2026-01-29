@@ -2,7 +2,7 @@ import { DerivConnection } from './deriv.js?v=3.1.67';
 import { ChartManager } from './chart.js?v=3.1.67';
 import { Indicators } from './indicators.js?v=3.1.67';
 
-const V = "3.1.98";
+const V = "3.1.99";
 
 // -- Device Identity Optimization V3.1.72 --
 let instanceId = localStorage.getItem('tk_instance_id') || ('TK-' + Math.random().toString(36).substr(2, 9).toUpperCase());
@@ -462,7 +462,7 @@ btnConnect.addEventListener('click', async () => {
         // --- Safety Circuit Pause ---
         if (checkSafetyCircuit.checked && Date.now() < pauseUntil) return;
 
-        // 1. SNIPER
+        // 1. SNIPER (V3.1.99: Strict Bollinger + Extreme RSI)
         if (isSniperActive && isStartOfCandle && !recentlyTraded) {
           const isCall = (data.lastPrice < data.bollinger.lower && data.rsi < (30 / totalSelectivity) && data.smc === "Alcista");
           const isPut = (data.lastPrice > data.bollinger.upper && data.rsi > (70 * totalSelectivity) && data.smc === "Bajista");
@@ -470,42 +470,46 @@ btnConnect.addEventListener('click', async () => {
           else if (isPut && isBearishPush) signals.push({ type: 'PUT', source: 'SNIPER' });
         }
 
-        // 2. OLYMP / WYSETRADE
+        // 2. OLYMP / WYSETRADE (V3.1.99: High Accuracy)
         if (isOlympActive && isStartOfCandle && !recentlyTraded) {
-          const olympSignal = Indicators.detectOlympRejection(chartManager.allCandles, data.ema36, data.ema51, data.sma20, data.bollinger, data.rsi);
+          const olympSignal = Indicators.detectOlympRejection(chartManager.allCandles, data.ema36, data.ema51, data.sma20, data.rsi);
           if (olympSignal && olympSignal !== "NONE") {
             const type = olympSignal.includes("CALL") ? 'CALL' : 'PUT';
             if ((type === 'CALL' && isBullishPush) || (type === 'PUT' && isBearishPush)) signals.push({ type, source: 'WYSETRADE' });
           }
         }
 
-        // 3. EMA/SMA
+        // 3. EMA/SMA (V3.1.99: Trend Alignment Filter)
         if (isEmaActive && data.crossover && isStartOfCandle) {
-          if (data.crossover === "UP" && isBullishPush) signals.push({ type: 'CALL', source: 'EMA/SMA' });
-          else if (data.crossover === "DOWN" && isBearishPush) signals.push({ type: 'PUT', source: 'EMA/SMA' });
+          const isCall = data.crossover === "UP" && isBullishPush && data.rsi > 50;
+          const isPut = data.crossover === "DOWN" && isBearishPush && data.rsi < 50;
+          if (isCall) signals.push({ type: 'CALL', source: 'EMA/SMA' });
+          else if (isPut) signals.push({ type: 'PUT', source: 'EMA/SMA' });
         }
 
-        // 4. GIRAFFA 2.0
+        // 4. GIRAFFA 2.0 (V3.1.99: Multi-Cluster Confirmation)
         if (isGiraffaActive && data.fibo && isStartOfCandle) {
-          if (data.adx > 20 && data.emaProximity) {
-            if (data.fibo === 'CALL' && isBullishPush) signals.push({ type: 'CALL', source: 'GIRAFFA' });
-            else if (data.fibo === 'PUT' && isBearishPush) signals.push({ type: 'PUT', source: 'GIRAFFA' });
+          if (data.adx > 25 && data.emaProximity) {
+            if (data.fibo === 'CALL' && isBullishPush && data.rsi > 45) signals.push({ type: 'CALL', source: 'GIRAFFA' });
+            else if (data.fibo === 'PUT' && isBearishPush && data.rsi < 55) signals.push({ type: 'PUT', source: 'GIRAFFA' });
           }
         }
 
-        // 5. SAFARI
+        // 5. SAFARI (V3.1.99: Strict Trend Pulse)
         if (isSafariActive && isStartOfCandle) {
-          const gap = (totalSelectivity - 1.0) * 8;
-          if (data.safariTrend === "Alcista" && data.smc === "Alcista" && data.rsiLaguerre > (70 + gap) && isBullishPush) signals.push({ type: 'CALL', source: 'SAFARI' });
-          else if (data.safariTrend === "Bajista" && data.smc === "Bajista" && data.rsiLaguerre < (30 - gap) && isBearishPush) signals.push({ type: 'PUT', source: 'SAFARI' });
+          const gap = (totalSelectivity - 1.0) * 10;
+          const isCall = data.safariTrend === "Alcista" && data.smc === "Alcista" && data.rsiLaguerre > (70 + gap) && isBullishPush;
+          const isPut = data.safariTrend === "Bajista" && data.smc === "Bajista" && data.rsiLaguerre < (30 - gap) && isBearishPush;
+          if (isCall) signals.push({ type: 'CALL', source: 'SAFARI' });
+          else if (isPut) signals.push({ type: 'PUT', source: 'SAFARI' });
         }
 
-        // 6. X-FAST
+        // 6. X-FAST (V3.1.99: Volatility Explosion)
         if (isXFastActive && data.bollinger && isStartOfCandle) {
-          const Z_THRESHOLD = 0.8 + ((totalSelectivity - 1.0) * 0.4);
+          const Z_THRESHOLD = 1.0 + ((totalSelectivity - 1.0) * 0.5); // Tightened baseline to 1.0
           const rsi7 = Indicators.calculateRSI(chartManager.getCloses(), 7);
-          if (data.zScore > Z_THRESHOLD && rsi7 > 60 && isBullishPush) signals.push({ type: 'CALL', source: 'X-FAST' });
-          else if (data.zScore < -Z_THRESHOLD && rsi7 < 40 && isBearishPush) signals.push({ type: 'PUT', source: 'X-FAST' });
+          if (data.zScore > Z_THRESHOLD && rsi7 > 65 && isBullishPush) signals.push({ type: 'CALL', source: 'X-FAST' });
+          else if (data.zScore < -Z_THRESHOLD && rsi7 < 35 && isBearishPush) signals.push({ type: 'PUT', source: 'X-FAST' });
         }
 
         // --- DISPATCH ---
